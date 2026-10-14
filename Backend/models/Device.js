@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 const deviceSchema = new mongoose.Schema(
@@ -45,7 +44,7 @@ const deviceSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 module.exports = mongoose.model("Device", deviceSchema);

@@ -1,4 +1,3 @@
-
 const express = require("express");
 const router = express.Router();
 
@@ -7,6 +6,8 @@ const {
   addDevice,
   checkDevice,
   getDeviceHistory,
+  deleteDevice,
+  updateDevice,
 } = require("../controllers/deviceController");
 
 // Get all devices
@@ -20,5 +21,8 @@ router.get("/:id/history", getDeviceHistory);
 
 // Manually check one device
 router.post("/:id/check", checkDevice);
+
+router.put("/:id", updateDevice);
+router.delete("/:id", deleteDevice);
 
 module.exports = router;

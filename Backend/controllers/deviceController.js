@@ -1,5 +1,4 @@
-
-const { checkEndpoint } = require("../services/monitorService");
+const { checkAndPersistDevice } = require("../services/deviceMonitoringService");
 const Device = require("../models/Device");
 const MonitorHistory = require("../models/MonitorHistory");
 
@@ -13,9 +12,7 @@ async function getDevices(req, res) {
       count: devices.length,
       devices: devices.map((device) => ({
         ...device,
-        checkedAt: device.checkedAt
-          ? new Date(device.checkedAt).toISOString()
-          : null,
+        checkedAt: device.checkedAt ? new Date(device.checkedAt).toISOString() : null,
       })),
     });
   } catch (error) {
@@ -48,10 +45,7 @@ async function addDevice(req, res) {
       id: Date.now().toString(),
       name: name.trim(),
       address: address.trim(),
-      type:
-        typeof type === "string" && type.trim()
-          ? type.trim()
-          : "Custom Endpoint",
+      type: typeof type === "string" && type.trim() ? type.trim() : "Custom Endpoint",
       status: "Unknown",
       latency: null,
       httpStatus: null,
@@ -84,31 +78,11 @@ async function checkDevice(req, res) {
       });
     }
 
-    const result = await checkEndpoint(device.address);
-
-    device.status = result.status ?? "Unknown";
-    device.latency = result.latency ?? null;
-    device.httpStatus = result.httpStatus ?? null;
-    device.checkedAt = result.checkedAt
-      ? new Date(result.checkedAt)
-      : new Date();
-    device.error = result.error ?? null;
-
-    await device.save();
-
-    await MonitorHistory.create({
-      deviceId: device.id,
-      name: device.name,
-      status: device.status,
-      latency: device.latency,
-      httpStatus: device.httpStatus,
-      checkedAt: device.checkedAt,
-      error: device.error,
-    });
+    const updatedDevice = await checkAndPersistDevice(device);
 
     res.json({
       success: true,
-      device: device.toObject(),
+      device: updatedDevice ? updatedDevice.toObject() : device.toObject(),
     });
   } catch (error) {
     console.error("Check device error:", error.message);
@@ -135,9 +109,7 @@ async function getDeviceHistory(req, res) {
       count: history.length,
       history: history.map((item) => ({
         ...item,
-        checkedAt: item.checkedAt
-          ? new Date(item.checkedAt).toISOString()
-          : null,
+        checkedAt: item.checkedAt ? new Date(item.checkedAt).toISOString() : null,
       })),
     });
   } catch (error) {
@@ -149,9 +121,102 @@ async function getDeviceHistory(req, res) {
   }
 }
 
+async function updateDevice(req, res) {
+  try {
+    const { name, address, type } = req.body;
+
+    if (
+      typeof name !== "string" ||
+      !name.trim() ||
+      typeof address !== "string" ||
+      !address.trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Device name and address are required",
+      });
+    }
+
+    const device = await Device.findOneAndUpdate(
+      { id: req.params.id },
+      {
+        $set: {
+          name: name.trim(),
+          address: address.trim(),
+          type:
+            typeof type === "string" && type.trim() ? type.trim() : "Custom Endpoint",
+        },
+      },
+      { returnDocument: "after", runValidators: true },
+    );
+
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        message: "Device not found",
+      });
+    }
+
+    return res.json({ success: true, device: device.toObject() });
+  } catch (error) {
+    console.error("Update device error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update device",
+    });
+  }
+}
+async function deleteDevice(req, res) {
+  const session = await Device.db.startSession();
+  let deletedHistoryCount = 0;
+
+  try {
+    await session.withTransaction(async () => {
+      const device = await Device.findOneAndDelete({ id: req.params.id }, { session });
+
+      if (!device) {
+        const error = new Error("Device not found");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const result = await MonitorHistory.deleteMany(
+        { deviceId: req.params.id },
+        { session },
+      );
+
+      deletedHistoryCount = result.deletedCount ?? 0;
+    });
+
+    return res.json({
+      success: true,
+      message: "Device and monitoring history deleted",
+      deviceId: req.params.id,
+      deletedHistoryCount,
+    });
+  } catch (error) {
+    if (error.statusCode === 404) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    console.error("Delete device error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete device",
+    });
+  } finally {
+    await session.endSession();
+  }
+}
+
 module.exports = {
   getDevices,
   addDevice,
   checkDevice,
   getDeviceHistory,
+  updateDevice,
+  deleteDevice,
 };

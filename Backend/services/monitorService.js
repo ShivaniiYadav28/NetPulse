@@ -1,4 +1,3 @@
-
 const dns = require("node:dns").promises;
 const net = require("node:net");
 const { performance } = require("node:perf_hooks");
@@ -8,7 +7,7 @@ const TIMEOUT_MS = 5000;
 function isPrivateIPv4(ip) {
   const parts = ip.split(".").map(Number);
 
-  if (parts.length !== 4 || parts.some(n => n < 0 || n > 255)) {
+  if (parts.length !== 4 || parts.some((n) => n < 0 || n > 255)) {
     return true;
   }
 
@@ -98,10 +97,7 @@ async function validateEndpoint(address) {
     }
   }
 
-  if (
-    addresses.length === 0 ||
-    addresses.some(entry => isPrivateIP(entry.address))
-  ) {
+  if (addresses.length === 0 || addresses.some((entry) => isPrivateIP(entry.address))) {
     throw new Error("Private or internal network addresses are not allowed.");
   }
 
@@ -134,10 +130,10 @@ async function checkEndpoint(address) {
       latency: null,
       httpStatus: null,
       checkedAt: new Date().toISOString(),
-      error: error.name === "TimeoutError" ||
-        error.name === "AbortError"
-        ? "Request timed out"
-        : error.message,
+      error:
+        error.name === "TimeoutError" || error.name === "AbortError"
+          ? "Request timed out"
+          : error.message,
     };
   }
 }

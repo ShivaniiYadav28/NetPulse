@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 const monitorHistorySchema = new mongoose.Schema(
@@ -36,7 +35,7 @@ const monitorHistorySchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 monitorHistorySchema.index({
@@ -44,7 +43,4 @@ monitorHistorySchema.index({
   checkedAt: -1,
 });
 
-module.exports = mongoose.model(
-  "MonitorHistory",
-  monitorHistorySchema
-);
+module.exports = mongoose.model("MonitorHistory", monitorHistorySchema);
