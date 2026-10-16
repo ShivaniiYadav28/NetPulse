@@ -1,5 +1,4 @@
-
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Activity,
   RefreshCw,
@@ -11,6 +10,12 @@ import {
 import { useDevices } from "../hooks/useDevices";
 import type { Device } from "../types/device";
 import { filterDevices } from "../utils/deviceUtils";
+import {
+  DISPLAY_PREFERENCES_EVENT,
+  DISPLAY_PREFERENCES_KEY,
+  loadDisplayPreferences,
+  type DisplayPreferences,
+} from "../utils/displayPreferences";
 
 import AddDeviceForm from "../components/devices/AddDeviceForm";
 import DeviceFilters from "../components/devices/DeviceFilters";
@@ -20,7 +25,25 @@ import EditDeviceModal from "../components/devices/EditDeviceModal";
 import ErrorAlert from "../components/common/ErrorAlert";
 
 export default function MonitorsPage() {
-  const dashboard = useDevices();
+  const [preferences, setPreferences] = useState<DisplayPreferences>(loadDisplayPreferences);
+
+  useEffect(() => {
+    const updatePreferences = () => setPreferences(loadDisplayPreferences());
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === DISPLAY_PREFERENCES_KEY || event.key === null) {
+        updatePreferences();
+      }
+    };
+
+    window.addEventListener(DISPLAY_PREFERENCES_EVENT, updatePreferences);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener(DISPLAY_PREFERENCES_EVENT, updatePreferences);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
+  const dashboard = useDevices(Number(preferences.refreshInterval));
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
@@ -30,7 +53,11 @@ export default function MonitorsPage() {
 
   const types = useMemo(
     () =>
-      [...new Set(dashboard.devices.map((device) => device.type).filter(Boolean))].sort(),
+      [
+        ...new Set(
+          dashboard.devices.map((device) => device.type).filter(Boolean),
+        ),
+      ].sort(),
     [dashboard.devices],
   );
 
@@ -50,10 +77,15 @@ export default function MonitorsPage() {
   const averageLatency = useMemo(() => {
     const values = dashboard.devices
       .map((device) => device.latency)
-      .filter((value): value is number => value !== null && Number.isFinite(value));
+      .filter(
+        (value): value is number =>
+          value !== null && Number.isFinite(value),
+      );
 
     return values.length
-      ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
+      ? Math.round(
+          values.reduce((sum, value) => sum + value, 0) / values.length,
+        )
       : null;
   }, [dashboard.devices]);
 
@@ -64,10 +96,16 @@ export default function MonitorsPage() {
   }
 
   function handleDelete(device: Device) {
-    void dashboard.remove(device, selectedDevice?.id ?? "", () => {
-      setSelectedDevice(null);
-    });
+    void dashboard.remove(
+      device,
+      selectedDevice?.id ?? "",
+      () => setSelectedDevice(null),
+    );
   }
+
+  const currentSelectedDevice = selectedDevice
+    ? dashboard.devices.find((device) => device.id === selectedDevice.id)
+    : undefined;
 
   return (
     <div className="space-y-6">
@@ -77,6 +115,7 @@ export default function MonitorsPage() {
             <Activity className="text-sky-400" size={24} />
             Monitors
           </h1>
+
           <p className="mt-1 text-sm text-slate-400">
             Manage monitored websites, APIs, and network endpoints.
           </p>
@@ -142,6 +181,7 @@ export default function MonitorsPage() {
               Search, filter, and manage your monitoring devices.
             </p>
           </div>
+
           <span className="rounded-full border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300">
             {filteredDevices.length} of {dashboard.devices.length}
           </span>
@@ -165,6 +205,8 @@ export default function MonitorsPage() {
           checkingDevice={dashboard.checkingDevice}
           deletingDevice={dashboard.deletingDevice}
           savingEdit={dashboard.savingEdit}
+          compactCards={preferences.compactCards}
+          showOfflineFirst={preferences.showOfflineFirst}
           onEdit={setEditingDevice}
           onCheck={(device) => void dashboard.check(device)}
           onDelete={handleDelete}
@@ -175,6 +217,7 @@ export default function MonitorsPage() {
             <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
               Inspect a monitor
             </p>
+
             <select
               aria-label="Choose a monitor to inspect"
               value={selectedDevice?.id ?? ""}
@@ -197,16 +240,13 @@ export default function MonitorsPage() {
         )}
       </section>
 
-      {selectedDevice &&
-        dashboard.devices.some((device) => device.id === selectedDevice.id) && (
-          <DeviceDetailsPanel
-            device={
-              dashboard.devices.find((device) => device.id === selectedDevice.id)!
-            }
-            history={dashboard.history}
-            onClose={() => setSelectedDevice(null)}
-          />
-        )}
+      {currentSelectedDevice && (
+        <DeviceDetailsPanel
+          device={currentSelectedDevice}
+          history={dashboard.history}
+          onClose={() => setSelectedDevice(null)}
+        />
+      )}
 
       <EditDeviceModal
         device={editingDevice}
@@ -214,7 +254,11 @@ export default function MonitorsPage() {
         onClose={() => setEditingDevice(null)}
         onSave={async (device, details) => {
           const saved = await dashboard.update(device, details);
-          if (saved) setEditingDevice(null);
+
+          if (saved) {
+            setEditingDevice(null);
+          }
+
           return saved;
         }}
       />
@@ -232,7 +276,7 @@ function StatCard({
   title: string;
   value: string | number;
   description: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   tone: "sky" | "emerald" | "rose" | "amber";
 }) {
   const tones = {
@@ -251,8 +295,12 @@ function StatCard({
             {value}
           </p>
         </div>
-        <div className={`rounded-xl border p-2.5 ${tones[tone]}`}>{icon}</div>
+
+        <div className={`rounded-xl border p-2.5 ${tones[tone]}`}>
+          {icon}
+        </div>
       </div>
+
       <p className="mt-3 text-xs text-slate-500">{description}</p>
     </article>
   );

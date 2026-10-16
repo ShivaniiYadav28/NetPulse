@@ -44,12 +44,12 @@ async function shutdown() {
 
   console.log("Shutting down NetPulse...");
 
-  if (stopMonitorJob) {
-    stopMonitorJob();
-  }
-
   if (server) {
     await new Promise((resolve) => server.close(resolve));
+  }
+
+  if (stopMonitorJob) {
+    await stopMonitorJob();
   }
 
   if (mongoose.connection.readyState !== 0) {

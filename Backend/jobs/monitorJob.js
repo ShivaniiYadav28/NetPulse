@@ -5,10 +5,11 @@ const INTERVAL_MS = 30_000; // Run monitoring every 30 seconds
 
 function startMonitorJob() {
   let isRunning = false;
+  let activeCycle = Promise.resolve();
 
   async function runChecks() {
     // Prevent overlapping monitoring cycles
-    if (isRunning) return;
+    if (isRunning) return activeCycle;
 
     isRunning = true;
 
@@ -34,15 +35,18 @@ function startMonitorJob() {
   }
 
   // Run one monitoring cycle immediately
-  void runChecks();
+  activeCycle = runChecks();
 
   // Continue monitoring every 30 seconds
   const timer = setInterval(() => {
-    void runChecks();
+    activeCycle = runChecks();
   }, INTERVAL_MS);
 
   // Return a function that stops the monitoring job
-  return () => clearInterval(timer);
+  return async () => {
+    clearInterval(timer);
+    await activeCycle;
+  };
 }
 
 module.exports = { startMonitorJob };

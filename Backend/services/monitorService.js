@@ -20,6 +20,10 @@ function isPrivateIPv4(ip) {
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) ||
+    (a === 192 && b === 0 && parts[2] === 0) ||
+    (a === 192 && b === 0 && parts[2] === 2) ||
+    (a === 198 && b === 51 && parts[2] === 100) ||
+    (a === 203 && b === 0 && parts[2] === 113) ||
     (a === 100 && b >= 64 && b <= 127) ||
     (a === 198 && (b === 18 || b === 19)) ||
     a >= 224
@@ -45,6 +49,8 @@ function isPrivateIP(ip) {
       normalized.startsWith("feb") ||
       normalized.startsWith("fc") ||
       normalized.startsWith("fd") ||
+      normalized.startsWith("ff") ||
+      normalized.startsWith("2001:db8:") ||
       normalized.startsWith("::ffff:")
     ) {
       return true;
@@ -84,7 +90,8 @@ async function validateEndpoint(address) {
     throw new Error("Local and internal endpoints are not allowed.");
   }
 
-  // Resolve hostnames and reject private or unsafe IP addresses.
+  // Resolve every answer and reject mixed public/private results. fetch resolves again,
+  // so DNS rebinding between this check and connection cannot be fully prevented here.
   let addresses;
 
   if (net.isIP(hostname)) {
@@ -138,4 +145,4 @@ async function checkEndpoint(address) {
   }
 }
 
-module.exports = { checkEndpoint };
+module.exports = { validateEndpoint, checkEndpoint };

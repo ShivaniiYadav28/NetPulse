@@ -1,4 +1,3 @@
-
 import {
   BrowserRouter,
   Navigate,
@@ -6,60 +5,63 @@ import {
   Routes,
 } from "react-router-dom";
 
+import { AuthProvider } from "./components/auth/AuthProvider";
+import {
+  GuestRoute,
+  ProtectedRoute,
+} from "./components/auth/ProtectedRoute";
 import AppLayout from "./components/layouts/AppLayout";
 
-import OverviewPage from "./pages/OverviewPage";
-import MonitorsPage from "./pages/MonitorsPage";
+import AlertsPage from "./pages/AlertsPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import IncidentsPage from "./pages/IncidentsPage";
-import AlertsPage from "./pages/AlertsPage";
+import LoginPage from "./pages/LoginPage";
+import MonitorsPage from "./pages/MonitorsPage";
+import OverviewPage from "./pages/OverviewPage";
+import RegisterPage from "./pages/RegisterPage";
 import SettingsPage from "./pages/SettingsPage";
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route element={<AppLayout />}>
-          {/* Main dashboard */}
-          <Route index element={<OverviewPage />} />
-
-          {/* Device management */}
+      <AuthProvider>
+        <Routes>
           <Route
-            path="monitors"
-            element={<MonitorsPage />}
+            path="/login"
+            element={
+              <GuestRoute>
+                <LoginPage />
+              </GuestRoute>
+            }
           />
 
-          {/* Analytics and monitoring reports */}
           <Route
-            path="analytics"
-            element={<AnalyticsPage />}
+            path="/register"
+            element={
+              <GuestRoute>
+                <RegisterPage />
+              </GuestRoute>
+            }
           />
 
-          {/* Outage and recovery records */}
           <Route
-            path="incidents"
-            element={<IncidentsPage />}
-          />
+            element={
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<OverviewPage />} />
+            <Route path="monitors" element={<MonitorsPage />} />
+            <Route path="analytics" element={<AnalyticsPage />} />
+            <Route path="incidents" element={<IncidentsPage />} />
+            <Route path="alerts" element={<AlertsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
 
-          {/* Notification configuration */}
-          <Route
-            path="alerts"
-            element={<AlertsPage />}
-          />
-
-          {/* Application preferences */}
-          <Route
-            path="settings"
-            element={<SettingsPage />}
-          />
-
-          {/* Redirect unknown routes to Overview */}
-          <Route
-            path="*"
-            element={<Navigate to="/" replace />}
-          />
-        </Route>
-      </Routes>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

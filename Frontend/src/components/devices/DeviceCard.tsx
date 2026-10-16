@@ -7,6 +7,7 @@ export default function DeviceCard({
   checking,
   deleting,
   savingEdit,
+  compactCards = false,
   onEdit,
   onCheck,
   onDelete,
@@ -15,6 +16,7 @@ export default function DeviceCard({
   checking: boolean;
   deleting: boolean;
   savingEdit: boolean;
+  compactCards?: boolean;
   onEdit: () => void;
   onCheck: () => void;
   onDelete: () => void;
@@ -26,12 +28,20 @@ export default function DeviceCard({
     : offline
       ? "border-rose-500/30 bg-rose-500/10 text-rose-400"
       : "border-slate-600 bg-slate-700/50 text-slate-300";
-  const dotClass = online ? "bg-emerald-400" : offline ? "bg-rose-400" : "bg-slate-400";
+  const dotClass = online
+    ? "bg-emerald-400"
+    : offline
+      ? "bg-rose-400"
+      : "bg-slate-400";
   return (
-    <article className="min-w-0 rounded-xl border border-slate-700/80 bg-slate-800/40 p-3.5 transition hover:border-sky-500/40 sm:p-4">
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sky-400/20 bg-sky-400/5 text-violet-400">
-          <Globe size={20} />
+    <article
+      className={`min-w-0 rounded-xl border border-slate-700/80 bg-slate-800/40 transition hover:border-sky-500/40 ${compactCards ? "p-3" : "p-3.5 sm:p-4"}`}
+    >
+      <div className={`flex items-start ${compactCards ? "gap-2" : "gap-3"}`}>
+        <div
+          className={`flex shrink-0 items-center justify-center rounded-xl border border-sky-400/20 bg-sky-400/5 text-violet-400 ${compactCards ? "h-9 w-9" : "h-10 w-10"}`}
+        >
+          <Globe size={compactCards ? 18 : 20} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -49,11 +59,13 @@ export default function DeviceCard({
             href={device.address}
             target="_blank"
             rel="noreferrer"
-            className="mt-1 block break-all text-xs text-sky-300 hover:text-sky-200"
+            className={`${compactCards ? "mt-0.5" : "mt-1"} block break-all text-xs text-sky-300 hover:text-sky-200`}
           >
             {device.address}
           </a>
-          <p className="mt-2 text-[11px] text-slate-400">
+          <p
+            className={`${compactCards ? "mt-1" : "mt-2"} text-[11px] text-slate-400`}
+          >
             {device.type}
             {device.httpStatus !== null ? ` · HTTP ${device.httpStatus}` : ""}
           </p>
@@ -61,7 +73,9 @@ export default function DeviceCard({
             <p className="mt-1 break-words text-[11px] text-rose-300">{device.error}</p>
           )}
           {device.checkedAt && (
-            <p className="mt-1.5 text-[11px] text-slate-500">
+            <p
+              className={`${compactCards ? "mt-1" : "mt-1.5"} text-[11px] text-slate-500`}
+            >
               Last checked: {new Date(device.checkedAt).toLocaleTimeString()}
             </p>
           )}
@@ -73,7 +87,9 @@ export default function DeviceCard({
           <p className="mt-0.5 text-[10px] text-slate-400">Latency</p>
         </div>
       </div>
-      <div className="mt-3 flex justify-end gap-2 border-t border-slate-700/60 pt-3">
+      <div
+        className={`flex justify-end gap-2 border-t border-slate-700/60 ${compactCards ? "mt-2 pt-2" : "mt-3 pt-3"}`}
+      >
         <button
           className={`${buttonSecondary} h-9 w-9 p-0 text-sky-300`}
           title={`Edit ${device.name}`}

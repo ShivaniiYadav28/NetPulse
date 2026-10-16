@@ -2,14 +2,14 @@ const { checkEndpoint } = require("./monitorService");
 const Device = require("../models/Device");
 const MonitorHistory = require("../models/MonitorHistory");
 const { recordIncident } = require("./incidentService");
+const { processAlerts } = require("./alertService");
 
 const HISTORY_LIMIT = 500;
+const deviceChecks = new Map();
 
-async function checkAndPersistDevice(device) {
+async function runDeviceCheck(device) {
   const result = await checkEndpoint(device.address);
-  const checkedAt = result.checkedAt
-    ? new Date(result.checkedAt)
-    : new Date();
+  const checkedAt = result.checkedAt ? new Date(result.checkedAt) : new Date();
 
   const normalizedResult = {
     status: result.status ?? "Unknown",
@@ -35,23 +35,27 @@ async function checkAndPersistDevice(device) {
 
   await MonitorHistory.create({
     deviceId: device.id,
+    ownerId: device.ownerId,
     name: device.name,
     ...normalizedResult,
     checkedAt,
   });
 
   // Keep only the newest 500 history entries per device.
-  const oldRecords = await MonitorHistory.find({
-    deviceId: device.id,
-  })
+  const oldestRetained = await MonitorHistory.find({ deviceId: device.id })
     .sort({ checkedAt: -1, _id: -1 })
     .skip(HISTORY_LIMIT)
-    .select("_id")
+    .limit(1)
+    .select("_id checkedAt")
     .lean();
 
-  if (oldRecords.length > 0) {
+  if (oldestRetained.length > 0) {
     await MonitorHistory.deleteMany({
-      _id: { $in: oldRecords.map((record) => record._id) },
+      deviceId: device.id,
+      $or: [
+        { checkedAt: { $lt: oldestRetained[0].checkedAt } },
+        { checkedAt: oldestRetained[0].checkedAt, _id: { $lt: oldestRetained[0]._id } },
+      ],
     });
   }
 
@@ -61,6 +65,7 @@ async function checkAndPersistDevice(device) {
     await recordIncident(
       {
         id: device.id,
+        ownerId: device.ownerId,
         name: device.name,
         address: device.address,
       },
@@ -68,13 +73,37 @@ async function checkAndPersistDevice(device) {
       checkedAt,
     );
   } catch (error) {
-    console.error(
-      `Incident tracking failed for ${device.name}:`,
-      error.message,
-    );
+    console.error(`Incident tracking failed for ${device.name}:`, error.message);
   }
 
+  await processAlerts(
+    {
+      id: device.id,
+      ownerId: device.ownerId,
+      name: device.name,
+      address: device.address,
+    },
+    normalizedResult,
+  );
+
   return updatedDevice;
+}
+
+async function checkAndPersistDevice(device) {
+  const previous = deviceChecks.get(device.id) || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => {
+    release = resolve;
+  });
+  const queued = previous.then(() => current);
+  deviceChecks.set(device.id, queued);
+  await previous;
+  try {
+    return await runDeviceCheck(device);
+  } finally {
+    release();
+    if (deviceChecks.get(device.id) === queued) deviceChecks.delete(device.id);
+  }
 }
 
 module.exports = { checkAndPersistDevice };

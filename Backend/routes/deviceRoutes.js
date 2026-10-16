@@ -3,6 +3,7 @@ const router = express.Router();
 
 const {
   getDevices,
+  getDevice,
   addDevice,
   checkDevice,
   getDeviceHistory,
@@ -12,6 +13,7 @@ const {
 
 // Get all devices
 router.get("/", getDevices);
+router.get("/:id", getDevice);
 
 // Add a device
 router.post("/", addDevice);

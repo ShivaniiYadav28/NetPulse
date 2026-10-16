@@ -1,301 +1,464 @@
-
-import { useMemo, useState } from "react";
 import {
-  AlertTriangle,
-  Bell,
-  CheckCircle2,
-  Clock,
-  Gauge,
-  RefreshCw,
-  Settings2,
-  WifiOff,
-} from "lucide-react";
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
+import { Bell, RefreshCw, Trash2 } from "lucide-react";
 
 import { useDevices } from "../hooks/useDevices";
 import ErrorAlert from "../components/common/ErrorAlert";
+import {
+  axios,
+  createAlertRule,
+  deleteAlertRule,
+  getAlertRules,
+  getAlerts,
+} from "../services/api";
+
+type Rule = {
+  _id: string;
+  name: string;
+  deviceId: string;
+  type: "MonitorDown" | "HighLatency";
+  thresholdMs?: number;
+  failureCount: number;
+  enabled: boolean;
+};
+
+type AlertEvent = {
+  _id: string;
+  deviceName: string;
+  severity: "Critical" | "High";
+  type: string;
+  message: string;
+  status: string;
+  occurrences: number;
+  triggeredAt: string;
+  lastTriggeredAt: string;
+};
+
+type IncidentFilter = "all" | "ongoing" | "resolved";
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error)) {
+    return error.response?.data?.message || fallback;
+  }
+
+  return fallback;
+}
+
+function formatDate(value: string | null | undefined): string {
+  if (!value) return "Not available";
+
+  const date = new Date(value);
+
+  return Number.isFinite(date.getTime())
+    ? date.toLocaleString()
+    : "Not available";
+}
 
 export default function AlertsPage() {
   const dashboard = useDevices();
-  const [threshold, setThreshold] = useState("500");
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
-  const latencyThreshold = Number(threshold);
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [events, setEvents] = useState<AlertEvent[]>([]);
 
-  const alerts = useMemo(
-    () =>
-      dashboard.devices.flatMap((device) => {
-        const items = [];
-
-        if (device.status.toLowerCase() === "offline") {
-          items.push({
-            id: `${device.id}-offline`,
-            title: `${device.name} is offline`,
-            description:
-              device.error || "The latest check indicates this monitor is offline.",
-            severity: "critical" as const,
-            time: device.checkedAt,
-          });
-        }
-
-        if (
-          Number.isFinite(latencyThreshold) &&
-          latencyThreshold > 0 &&
-          device.latency !== null &&
-          device.latency >= latencyThreshold
-        ) {
-          items.push({
-            id: `${device.id}-latency`,
-            title: `High latency detected: ${device.name}`,
-            description: `Latest recorded latency is ${device.latency} ms, meeting or exceeding your ${latencyThreshold} ms threshold.`,
-            severity: "warning" as const,
-            time: device.checkedAt,
-          });
-        }
-
-        return items;
-      }),
-    [dashboard.devices, latencyThreshold],
+  const [name, setName] = useState("");
+  const [deviceId, setDeviceId] = useState("");
+  const [type, setType] = useState<"MonitorDown" | "HighLatency">(
+    "MonitorDown",
   );
+  const [threshold, setThreshold] = useState("500");
+  const [failures, setFailures] = useState("1");
 
-  const criticalCount = alerts.filter(
-    (alert) => alert.severity === "critical",
-  ).length;
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null);
 
-  const warningCount = alerts.filter(
-    (alert) => alert.severity === "warning",
-  ).length;
+  const mounted = useRef(false);
+  const refreshing = useRef(false);
+
+  useEffect(() => {
+    mounted.current = true;
+
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const refresh = useCallback(async () => {
+    if (refreshing.current) return;
+
+    refreshing.current = true;
+
+    if (mounted.current) {
+      setLoading(true);
+      setError("");
+    }
+
+    try {
+      const [ruleResponse, eventResponse] = await Promise.all([
+        getAlertRules(),
+        getAlerts({ limit: 100 }),
+      ]);
+
+      if (!mounted.current) return;
+
+      const receivedRules = ruleResponse.data?.data;
+      const receivedEvents = eventResponse.data?.data;
+
+      setRules(Array.isArray(receivedRules) ? receivedRules : []);
+      setEvents(Array.isArray(receivedEvents) ? receivedEvents : []);
+    } catch (requestError: unknown) {
+      if (mounted.current) {
+        setError(
+          getErrorMessage(requestError, "Unable to load alerts."),
+        );
+      }
+    } finally {
+      refreshing.current = false;
+
+      if (mounted.current) {
+        setLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (submitting) return;
+
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      setError("Enter a name for the alert rule.");
+      return;
+    }
+
+    if (!deviceId || !dashboard.devices.some((device) => device.id === deviceId)) {
+      setError("Select a valid monitor.");
+      return;
+    }
+
+    const thresholdValue = Number(threshold);
+    const failureValue = Number(failures);
+
+    if (
+      type === "HighLatency" &&
+      (!Number.isInteger(thresholdValue) ||
+        thresholdValue < 1 ||
+        thresholdValue > 60000)
+    ) {
+      setError("Latency threshold must be between 1 and 60000 ms.");
+      return;
+    }
+
+    if (
+      type === "MonitorDown" &&
+      (!Number.isInteger(failureValue) ||
+        failureValue < 1 ||
+        failureValue > 20)
+    ) {
+      setError("Failure count must be between 1 and 20.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+
+    try {
+      await createAlertRule({
+        name: trimmedName,
+        deviceId,
+        type,
+        ...(type === "HighLatency"
+          ? { thresholdMs: thresholdValue }
+          : {}),
+        failureCount: type === "MonitorDown" ? failureValue : 1,
+      });
+
+      if (!mounted.current) return;
+
+      setName("");
+      await refresh();
+    } catch (requestError: unknown) {
+      if (mounted.current) {
+        setError(
+          getErrorMessage(requestError, "Unable to create alert rule."),
+        );
+      }
+    } finally {
+      if (mounted.current) {
+        setSubmitting(false);
+      }
+    }
+  }
+
+  async function removeRule(id: string) {
+    if (deletingRuleId) return;
+
+    setDeletingRuleId(id);
+    setError("");
+
+    try {
+      await deleteAlertRule(id);
+      await refresh();
+    } catch (requestError: unknown) {
+      if (mounted.current) {
+        setError(
+          getErrorMessage(requestError, "Unable to delete alert rule."),
+        );
+      }
+    } finally {
+      if (mounted.current) {
+        setDeletingRuleId(null);
+      }
+    }
+  }
+
+  const displayError = error || dashboard.error;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-white">
-            <Bell size={24} className="text-sky-400" />
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-white">
+            <Bell className="text-sky-400" />
             Alerts
           </h1>
           <p className="mt-1 text-sm text-slate-400">
-            Review current monitor conditions and configure your alert threshold.
+            Rules are evaluated on scheduled or manual monitor checks.
           </p>
         </div>
 
         <button
           type="button"
-          onClick={() => void dashboard.fetchDashboard(true)}
-          disabled={dashboard.refreshing}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm text-slate-200 transition hover:bg-slate-700 disabled:opacity-50"
+          onClick={() => void refresh()}
+          disabled={loading}
+          className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw
             size={15}
-            className={dashboard.refreshing ? "animate-spin" : ""}
+            className={`mr-2 inline ${loading ? "animate-spin" : ""}`}
           />
-          {dashboard.refreshing ? "Refreshing..." : "Refresh"}
+          {loading ? "Refreshing..." : "Refresh"}
         </button>
-      </div>
+      </header>
 
       <ErrorAlert
-        message={dashboard.error}
-        onDismiss={() => dashboard.setError("")}
+        message={displayError}
+        onDismiss={() => {
+          setError("");
+          dashboard.setError("");
+        }}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryCard
-          title="Active conditions"
-          value={alerts.length}
-          icon={<Bell size={19} />}
-          tone="sky"
-        />
-        <SummaryCard
-          title="Offline alerts"
-          value={criticalCount}
-          icon={<WifiOff size={19} />}
-          tone="rose"
-        />
-        <SummaryCard
-          title="Latency warnings"
-          value={warningCount}
-          icon={<Gauge size={19} />}
-          tone="amber"
-        />
-      </div>
+      <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-5">
+        <h2 className="mb-4 font-bold text-white">Create alert rule</h2>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)]">
-        <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
-          <div className="border-b border-slate-800 p-4 sm:p-5">
-            <h2 className="text-lg font-bold text-white">Current alerts</h2>
-            <p className="mt-1 text-xs text-slate-400">
-              Conditions derived from the latest monitor data.
-            </p>
-          </div>
+        {dashboard.devices.length === 0 && !dashboard.loading && (
+          <p className="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-sm text-amber-300">
+            Add a monitor before creating an alert rule.
+          </p>
+        )}
 
-          {dashboard.loading ? (
-            <div className="p-10 text-center text-sm text-slate-400">
-              Loading alert conditions...
-            </div>
-          ) : alerts.length === 0 ? (
-            <div className="flex flex-col items-center px-5 py-12 text-center">
-              <CheckCircle2 size={34} className="mb-3 text-emerald-400" />
-              <h3 className="font-semibold text-white">All clear</h3>
-              <p className="mt-2 max-w-sm text-sm leading-6 text-slate-400">
-                No offline monitors or latency threshold violations are detected in the current data.
-              </p>
-            </div>
+        <form
+          onSubmit={(event) => void submit(event)}
+          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"
+        >
+          <input
+            required
+            maxLength={100}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Rule name"
+            aria-label="Rule name"
+            className="min-w-0 rounded-lg border border-slate-700 bg-slate-950 p-2.5 text-sm text-white outline-none focus:border-sky-500"
+          />
+
+          <select
+            required
+            value={deviceId}
+            onChange={(event) => setDeviceId(event.target.value)}
+            aria-label="Select monitor"
+            className="min-w-0 rounded-lg border border-slate-700 bg-slate-950 p-2.5 text-sm text-white outline-none focus:border-sky-500"
+          >
+            <option value="">Select monitor</option>
+            {dashboard.devices.map((device) => (
+              <option key={device.id} value={device.id}>
+                {device.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={type}
+            onChange={(event) =>
+              setType(event.target.value as "MonitorDown" | "HighLatency")
+            }
+            aria-label="Alert type"
+            className="min-w-0 rounded-lg border border-slate-700 bg-slate-950 p-2.5 text-sm text-white outline-none focus:border-sky-500"
+          >
+            <option value="MonitorDown">Monitor down</option>
+            <option value="HighLatency">High latency</option>
+          </select>
+
+          {type === "HighLatency" ? (
+            <input
+              required
+              type="number"
+              min={1}
+              max={60000}
+              step={1}
+              value={threshold}
+              onChange={(event) => setThreshold(event.target.value)}
+              aria-label="Latency threshold in milliseconds"
+              placeholder="Threshold (ms)"
+              className="min-w-0 rounded-lg border border-slate-700 bg-slate-950 p-2.5 text-sm text-white outline-none focus:border-sky-500"
+            />
           ) : (
-            <div className="divide-y divide-slate-800">
-              {alerts.map((alert) => (
-                <article key={alert.id} className="flex gap-3 p-4 sm:p-5">
-                  <div
-                    className={`mt-0.5 rounded-xl border p-2.5 ${
-                      alert.severity === "critical"
-                        ? "border-rose-500/20 bg-rose-500/10 text-rose-300"
-                        : "border-amber-500/20 bg-amber-500/10 text-amber-300"
+            <input
+              required
+              type="number"
+              min={1}
+              max={20}
+              step={1}
+              value={failures}
+              onChange={(event) => setFailures(event.target.value)}
+              aria-label="Failures before alert"
+              placeholder="Failure count"
+              className="min-w-0 rounded-lg border border-slate-700 bg-slate-950 p-2.5 text-sm text-white outline-none focus:border-sky-500"
+            />
+          )}
+
+          <button
+            type="submit"
+            disabled={
+              submitting ||
+              dashboard.loading ||
+              dashboard.devices.length === 0
+            }
+            className="rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {submitting ? "Adding..." : "Add rule"}
+          </button>
+        </form>
+      </section>
+
+      <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-5">
+        <h2 className="mb-3 font-bold text-white">Configured rules</h2>
+
+        {loading ? (
+          <p className="text-sm text-slate-400">Loading alert rules...</p>
+        ) : rules.length > 0 ? (
+          <div className="divide-y divide-slate-800">
+            {rules.map((rule) => {
+              const monitorName =
+                dashboard.devices.find((device) => device.id === rule.deviceId)
+                  ?.name || rule.deviceId;
+
+              return (
+                <div
+                  key={rule._id}
+                  className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm text-slate-200"
+                >
+                  <div className="min-w-0">
+                    <p className="break-words font-medium text-white">
+                      {rule.name}
+                    </p>
+                    <p className="mt-1 break-words text-xs text-slate-400">
+                      {rule.type === "MonitorDown"
+                        ? "Monitor down"
+                        : "High latency"}{" "}
+                      · {monitorName}
+                      {rule.type === "HighLatency"
+                        ? ` · ${rule.thresholdMs ?? "—"} ms`
+                        : ` · ${rule.failureCount} failures`}
+                    </p>
+                    <p
+                      className={`mt-1 text-xs ${
+                        rule.enabled ? "text-emerald-400" : "text-slate-500"
+                      }`}
+                    >
+                      {rule.enabled ? "Enabled" : "Disabled"}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => void removeRule(rule._id)}
+                    disabled={deletingRuleId !== null}
+                    aria-label={`Delete ${rule.name}`}
+                    title="Delete alert rule"
+                    className="rounded-lg p-2 text-rose-400 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {deletingRuleId === rule._id ? (
+                      <RefreshCw size={16} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={16} />
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">
+            No alert rules configured.
+          </p>
+        )}
+      </section>
+
+      <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-5">
+        <h2 className="mb-3 font-bold text-white">Alert history</h2>
+
+        {loading ? (
+          <p className="text-sm text-slate-400">Loading alert history...</p>
+        ) : events.length > 0 ? (
+          <div className="divide-y divide-slate-800">
+            {events.map((item) => (
+              <article key={item._id} className="py-3 text-sm text-slate-200">
+                <div className="flex flex-wrap items-center gap-2">
+                  <strong>{item.deviceName || "Unknown monitor"}</strong>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs ${
+                      item.severity === "Critical"
+                        ? "bg-rose-500/10 text-rose-300"
+                        : "bg-amber-500/10 text-amber-300"
                     }`}
                   >
-                    {alert.severity === "critical" ? (
-                      <WifiOff size={19} />
-                    ) : (
-                      <AlertTriangle size={19} />
-                    )}
-                  </div>
+                    {item.severity}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {item.status}
+                  </span>
+                </div>
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-sm font-semibold text-slate-100">
-                        {alert.title}
-                      </h3>
-                      <span
-                        className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${
-                          alert.severity === "critical"
-                            ? "bg-rose-400/10 text-rose-300"
-                            : "bg-amber-400/10 text-amber-300"
-                        }`}
-                      >
-                        {alert.severity}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-400">
-                      {alert.description}
-                    </p>
-                    <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
-                      <Clock size={12} />
-                      {formatDate(alert.time)}
-                    </p>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
+                <p className="mt-1 break-words">{item.message}</p>
 
-        <section className="rounded-xl border border-slate-800 bg-gradient-to-br from-slate-900 to-[#0a1423] p-5">
-          <div className="mb-5 flex items-center gap-3">
-            <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-2.5 text-sky-300">
-              <Settings2 size={20} />
-            </div>
-            <div>
-              <h2 className="font-bold text-white">Alert preferences</h2>
-              <p className="mt-1 text-xs text-slate-400">
-                Configure the conditions shown here.
-              </p>
-            </div>
+                <p className="mt-1 text-xs text-slate-400">
+                  {item.occurrences} qualifying checks
+                </p>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  First triggered: {formatDate(item.triggeredAt)} · Last
+                  triggered: {formatDate(item.lastTriggeredAt)}
+                </p>
+              </article>
+            ))}
           </div>
-
-          <label className="block text-sm font-medium text-slate-200">
-            High latency threshold
-            <div className="mt-2 flex items-center gap-2">
-              <input
-                type="number"
-                min="1"
-                max="60000"
-                value={threshold}
-                onChange={(event) => setThreshold(event.target.value)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-sky-500"
-              />
-              <span className="text-sm text-slate-400">ms</span>
-            </div>
-          </label>
-
-          <p className="mt-2 text-xs leading-5 text-slate-500">
-            Monitors at or above this latency will show a warning. This setting is not persisted to the backend.
-          </p>
-
-          <div className="my-5 border-t border-slate-800" />
-
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-slate-200">
-                Alert display
-              </p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">
-                Show current alert conditions in this page.
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={notificationsEnabled}
-              onClick={() => setNotificationsEnabled((enabled) => !enabled)}
-              className={`relative h-6 w-11 shrink-0 rounded-full transition ${
-                notificationsEnabled ? "bg-sky-500" : "bg-slate-700"
-              }`}
-            >
-              <span
-                className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${
-                  notificationsEnabled ? "left-6" : "left-1"
-                }`}
-              />
-            </button>
-          </div>
-
-          {!notificationsEnabled && (
-            <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200">
-              Alert display is disabled. Your monitors continue to be checked by the existing monitoring system.
-            </p>
-          )}
-
-          <div className="mt-5 rounded-lg border border-slate-800 bg-slate-950/60 p-3">
-            <p className="text-xs leading-5 text-slate-400">
-              <strong className="text-slate-200">Notification status:</strong>{" "}
-              This page displays alert conditions only. Email, SMS, and push notification delivery require backend support.
-            </p>
-          </div>
-        </section>
-      </div>
+        ) : (
+          <p className="text-sm text-slate-400">No alerts recorded.</p>
+        )}
+      </section>
     </div>
-  );
-}
-
-function formatDate(value: string | null) {
-  if (!value) return "Time unavailable";
-  const date = new Date(value);
-  return Number.isFinite(date.getTime()) ? date.toLocaleString() : "Time unavailable";
-}
-
-function SummaryCard({
-  title,
-  value,
-  icon,
-  tone,
-}: {
-  title: string;
-  value: number;
-  icon: React.ReactNode;
-  tone: "sky" | "rose" | "amber";
-}) {
-  const tones = {
-    sky: "border-sky-500/20 bg-sky-500/10 text-sky-300",
-    rose: "border-rose-500/20 bg-rose-500/10 text-rose-300",
-    amber: "border-amber-500/20 bg-amber-500/10 text-amber-300",
-  };
-
-  return (
-    <article className="rounded-xl border border-slate-800 bg-gradient-to-br from-slate-900 to-[#0a1423] p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-slate-400">{title}</p>
-          <p className="mt-2 text-2xl font-bold text-white">{value}</p>
-        </div>
-        <div className={`rounded-xl border p-2.5 ${tones[tone]}`}>{icon}</div>
-      </div>
-    </article>
   );
 }

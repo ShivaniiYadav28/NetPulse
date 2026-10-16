@@ -1,5 +1,4 @@
-
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   Activity,
   Clock3,
@@ -30,9 +29,11 @@ export default function AnalyticsPage() {
 
   const cutoff = useMemo(() => {
     const now = Date.now();
+
     if (range === "24h") return now - 24 * 60 * 60 * 1000;
     if (range === "7d") return now - 7 * 24 * 60 * 60 * 1000;
     if (range === "30d") return now - 30 * 24 * 60 * 60 * 1000;
+
     return 0;
   }, [range]);
 
@@ -40,20 +41,33 @@ export default function AnalyticsPage() {
     () =>
       dashboard.history.filter((point) => {
         if (!point.checkedAt) return false;
+
         const timestamp = new Date(point.checkedAt).getTime();
-        if (!Number.isFinite(timestamp) || timestamp < cutoff) return false;
-        return selectedDevice === "all" || point.deviceId === selectedDevice;
+
+        if (!Number.isFinite(timestamp) || timestamp < cutoff) {
+          return false;
+        }
+
+        return (
+          selectedDevice === "all" ||
+          point.deviceId === selectedDevice
+        );
       }),
     [dashboard.history, cutoff, selectedDevice],
   );
 
   const metrics = useMemo(() => {
     const validStatuses = history.filter(
-      (point) => point.status === "Online" || point.status === "Offline",
+      (point) =>
+        point.status === "Online" || point.status === "Offline",
     );
+
     const latencyValues = history
       .map((point) => point.latency)
-      .filter((value): value is number => value !== null && Number.isFinite(value));
+      .filter(
+        (value): value is number =>
+          value !== null && Number.isFinite(value),
+      );
 
     const averageLatency = latencyValues.length
       ? Math.round(
@@ -63,12 +77,15 @@ export default function AnalyticsPage() {
       : null;
 
     const uptime = validStatuses.length
-      ? (validStatuses.filter((point) => point.status === "Online").length /
+      ? (validStatuses.filter((point) => point.status === "Online")
+          .length /
           validStatuses.length) *
         100
       : null;
 
-    const maxLatency = latencyValues.length ? Math.max(...latencyValues) : null;
+    const maxLatency = latencyValues.length
+      ? Math.max(...latencyValues)
+      : null;
 
     return {
       checks: history.length,
@@ -83,7 +100,8 @@ export default function AnalyticsPage() {
       history
         .filter(
           (point) =>
-            point.latency !== null && Number.isFinite(point.latency),
+            point.latency !== null &&
+            Number.isFinite(point.latency),
         )
         .map((point) => ({
           timestamp: new Date(point.checkedAt!).getTime(),
@@ -102,33 +120,57 @@ export default function AnalyticsPage() {
 
   const deviceRows = useMemo(
     () =>
-      dashboard.devices.map((device) => {
-        const deviceHistory = history.filter(
-          (point) => point.deviceId === device.id,
-        );
-        const latencies = deviceHistory
-          .map((point) => point.latency)
-          .filter((value): value is number => value !== null && Number.isFinite(value));
-        const valid = deviceHistory.filter(
-          (point) => point.status === "Online" || point.status === "Offline",
-        );
-        const uptime = valid.length
-          ? (valid.filter((point) => point.status === "Online").length /
-              valid.length) *
-            100
-          : null;
+      dashboard.devices
+        .filter(
+          (device) =>
+            selectedDevice === "all" ||
+            device.id === selectedDevice,
+        )
+        .map((device) => {
+          const deviceHistory = history.filter(
+            (point) => point.deviceId === device.id,
+          );
 
-        return {
-          ...device,
-          checks: deviceHistory.length,
-          averageLatency: latencies.length
-            ? Math.round(latencies.reduce((sum, value) => sum + value, 0) / latencies.length)
-            : null,
-          uptime,
-        };
-      }),
-    [dashboard.devices, history],
+          const latencies = deviceHistory
+            .map((point) => point.latency)
+            .filter(
+              (value): value is number =>
+                value !== null && Number.isFinite(value),
+            );
+
+          const valid = deviceHistory.filter(
+            (point) =>
+              point.status === "Online" ||
+              point.status === "Offline",
+          );
+
+          const uptime = valid.length
+            ? (valid.filter((point) => point.status === "Online")
+                .length /
+                valid.length) *
+              100
+            : null;
+
+          return {
+            ...device,
+            checks: deviceHistory.length,
+            averageLatency: latencies.length
+              ? Math.round(
+                  latencies.reduce((sum, value) => sum + value, 0) /
+                    latencies.length,
+                )
+              : null,
+            uptime,
+          };
+        }),
+    [dashboard.devices, history, selectedDevice],
   );
+
+  const selectedDeviceExists =
+    selectedDevice === "all" ||
+    dashboard.devices.some(
+      (device) => device.id === selectedDevice,
+    );
 
   return (
     <div className="space-y-6">
@@ -138,7 +180,8 @@ export default function AnalyticsPage() {
             Analytics
           </h1>
           <p className="mt-1 text-sm text-slate-400">
-            Understand latency, availability, and monitoring performance from recorded checks.
+            Understand latency, availability, and monitoring
+            performance from recorded checks.
           </p>
         </div>
 
@@ -146,11 +189,13 @@ export default function AnalyticsPage() {
           type="button"
           onClick={() => void dashboard.fetchDashboard(true)}
           disabled={dashboard.refreshing}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm text-slate-200 transition hover:bg-slate-700 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm text-slate-200 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw
             size={15}
-            className={dashboard.refreshing ? "animate-spin" : ""}
+            className={
+              dashboard.refreshing ? "animate-spin" : ""
+            }
           />
           {dashboard.refreshing ? "Refreshing..." : "Refresh data"}
         </button>
@@ -166,7 +211,9 @@ export default function AnalyticsPage() {
           Time range
           <select
             value={range}
-            onChange={(event) => setRange(event.target.value as RangeOption)}
+            onChange={(event) =>
+              setRange(event.target.value as RangeOption)
+            }
             className="min-w-36 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-sky-500"
           >
             <option value="24h">Last 24 hours</option>
@@ -180,7 +227,9 @@ export default function AnalyticsPage() {
           Monitor
           <select
             value={selectedDevice}
-            onChange={(event) => setSelectedDevice(event.target.value)}
+            onChange={(event) =>
+              setSelectedDevice(event.target.value)
+            }
             className="min-w-48 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-sky-500"
           >
             <option value="all">All monitors</option>
@@ -193,7 +242,7 @@ export default function AnalyticsPage() {
         </label>
 
         <p className="ml-auto self-end text-xs text-slate-500">
-          Based on {metrics.checks} recorded checks
+          Based on {metrics.checks.toLocaleString()} recorded checks
         </p>
       </section>
 
@@ -204,21 +253,36 @@ export default function AnalyticsPage() {
           detail="Within selected range"
           icon={<Activity size={19} />}
         />
+
         <MetricCard
           title="Average latency"
-          value={metrics.averageLatency === null ? "—" : `${metrics.averageLatency} ms`}
-          detail="Successful measurements with latency"
+          value={
+            metrics.averageLatency === null
+              ? "—"
+              : `${metrics.averageLatency} ms`
+          }
+          detail="Measurements with recorded latency"
           icon={<Gauge size={19} />}
         />
+
         <MetricCard
           title="Recorded uptime"
-          value={metrics.uptime === null ? "—" : `${metrics.uptime.toFixed(2)}%`}
-          detail="Online checks ÷ known status checks"
+          value={
+            metrics.uptime === null
+              ? "—"
+              : `${metrics.uptime.toFixed(2)}%`
+          }
+          detail="Online checks divided by known status checks"
           icon={<Wifi size={19} />}
         />
+
         <MetricCard
           title="Peak latency"
-          value={metrics.maxLatency === null ? "—" : `${metrics.maxLatency} ms`}
+          value={
+            metrics.maxLatency === null
+              ? "—"
+              : `${metrics.maxLatency} ms`
+          }
           detail="Highest recorded measurement"
           icon={<TrendingUp size={19} />}
         />
@@ -226,17 +290,26 @@ export default function AnalyticsPage() {
 
       <section className="rounded-xl border border-slate-800 bg-gradient-to-br from-slate-900 to-[#0a1423] p-4 sm:p-5">
         <div className="mb-5">
-          <h2 className="text-lg font-bold text-white">Latency trend</h2>
+          <h2 className="text-lg font-bold text-white">
+            Latency trend
+          </h2>
           <p className="mt-1 text-xs text-slate-400">
             Historical response times in milliseconds.
           </p>
         </div>
 
-        {chartData.length ? (
+        {chartData.length > 0 ? (
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 8, right: 12, left: 4, bottom: 12 }}>
-                <CartesianGrid stroke="#263a52" strokeDasharray="3 3" />
+              <LineChart
+                data={chartData}
+                margin={{ top: 8, right: 12, left: 4, bottom: 12 }}
+              >
+                <CartesianGrid
+                  stroke="#263a52"
+                  strokeDasharray="3 3"
+                />
+
                 <XAxis
                   dataKey="time"
                   tick={{ fill: "#94a3b8", fontSize: 10 }}
@@ -244,6 +317,7 @@ export default function AnalyticsPage() {
                   axisLine={{ stroke: "#345675" }}
                   tickLine={{ stroke: "#345675" }}
                 />
+
                 <YAxis
                   unit=" ms"
                   width={62}
@@ -251,6 +325,7 @@ export default function AnalyticsPage() {
                   axisLine={{ stroke: "#345675" }}
                   tickLine={{ stroke: "#345675" }}
                 />
+
                 <Tooltip
                   contentStyle={{
                     background: "#101d30",
@@ -262,10 +337,13 @@ export default function AnalyticsPage() {
                   formatter={(value) => [`${value} ms`, "Latency"]}
                   labelFormatter={(_label, payload) =>
                     payload?.[0]?.payload
-                      ? new Date(payload[0].payload.timestamp).toLocaleString()
+                      ? new Date(
+                          payload[0].payload.timestamp,
+                        ).toLocaleString()
                       : ""
                   }
                 />
+
                 <Line
                   type="monotone"
                   dataKey="latency"
@@ -288,13 +366,26 @@ export default function AnalyticsPage() {
 
       <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
         <div className="border-b border-slate-800 p-4 sm:p-5">
-          <h2 className="text-lg font-bold text-white">Monitor performance</h2>
+          <h2 className="text-lg font-bold text-white">
+            Monitor performance
+          </h2>
           <p className="mt-1 text-xs text-slate-400">
-            Per-monitor metrics calculated from the selected history range.
+            Per-monitor metrics calculated from the selected history
+            range and monitor.
           </p>
         </div>
 
-        {deviceRows.length ? (
+        {!dashboard.devices.length ? (
+          <EmptyState
+            title="No monitors configured"
+            detail="Add a monitor to start collecting performance data."
+          />
+        ) : !selectedDeviceExists ? (
+          <EmptyState
+            title="Selected monitor not found"
+            detail="Choose another monitor from the filter above."
+          />
+        ) : deviceRows.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-left text-sm">
               <thead className="bg-slate-950/60 text-xs uppercase tracking-wide text-slate-500">
@@ -306,26 +397,40 @@ export default function AnalyticsPage() {
                   <th className="px-5 py-3 font-medium">Recorded uptime</th>
                 </tr>
               </thead>
+
               <tbody className="divide-y divide-slate-800">
                 {deviceRows.map((device) => (
-                  <tr key={device.id} className="transition hover:bg-slate-800/40">
+                  <tr
+                    key={device.id}
+                    className="transition hover:bg-slate-800/40"
+                  >
                     <td className="px-5 py-4">
-                      <p className="font-medium text-slate-100">{device.name}</p>
+                      <p className="font-medium text-slate-100">
+                        {device.name}
+                      </p>
                       <p className="mt-1 max-w-xs truncate text-xs text-slate-500">
                         {device.address}
                       </p>
                     </td>
+
                     <td className="px-5 py-4">
                       <StatusPill status={device.status} />
                     </td>
-                    <td className="px-5 py-4 text-slate-300">{device.checks}</td>
+
+                    <td className="px-5 py-4 text-slate-300">
+                      {device.checks}
+                    </td>
+
                     <td className="px-5 py-4 text-slate-300">
                       {device.averageLatency === null
                         ? "—"
                         : `${device.averageLatency} ms`}
                     </td>
+
                     <td className="px-5 py-4 text-slate-300">
-                      {device.uptime === null ? "—" : `${device.uptime.toFixed(2)}%`}
+                      {device.uptime === null
+                        ? "—"
+                        : `${device.uptime.toFixed(2)}%`}
                     </td>
                   </tr>
                 ))}
@@ -334,15 +439,16 @@ export default function AnalyticsPage() {
           </div>
         ) : (
           <EmptyState
-            title="No monitors configured"
-            detail="Add a monitor to start collecting performance data."
+            title="No monitor data available"
+            detail="No monitors match the current selection."
           />
         )}
       </section>
 
       <p className="flex items-start gap-2 text-xs leading-5 text-slate-500">
         <Clock3 size={14} className="mt-0.5 shrink-0" />
-        Uptime is estimated from recorded online/offline checks in the selected period. It is not a time-weighted SLA calculation.
+        Uptime is estimated from recorded online/offline checks in the
+        selected period. It is not a time-weighted SLA calculation.
       </p>
     </div>
   );
@@ -357,20 +463,26 @@ function MetricCard({
   title: string;
   value: string;
   detail: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
 }) {
   return (
     <article className="rounded-xl border border-slate-800 bg-gradient-to-br from-slate-900 to-[#0a1423] p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm text-slate-400">{title}</p>
-          <p className="mt-2 text-2xl font-bold text-white">{value}</p>
+          <p className="mt-2 text-2xl font-bold text-white">
+            {value}
+          </p>
         </div>
+
         <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-2.5 text-sky-300">
           {icon}
         </div>
       </div>
-      <p className="mt-3 text-xs leading-5 text-slate-500">{detail}</p>
+
+      <p className="mt-3 text-xs leading-5 text-slate-500">
+        {detail}
+      </p>
     </article>
   );
 }
@@ -401,8 +513,12 @@ function EmptyState({
   return (
     <div className="flex min-h-44 flex-col items-center justify-center px-5 py-10 text-center">
       <Activity size={27} className="mb-3 text-slate-500" />
-      <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
-      <p className="mt-2 max-w-md text-xs leading-5 text-slate-500">{detail}</p>
+      <h3 className="text-sm font-semibold text-slate-200">
+        {title}
+      </h3>
+      <p className="mt-2 max-w-md text-xs leading-5 text-slate-500">
+        {detail}
+      </p>
     </div>
   );
 }

@@ -2,6 +2,11 @@ const mongoose = require("mongoose");
 
 const deviceSchema = new mongoose.Schema(
   {
+    ownerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      index: true,
+    },
     id: {
       type: String,
       required: true,

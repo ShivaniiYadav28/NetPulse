@@ -2,7 +2,7 @@ const Incident = require("../models/Incident");
 
 async function getIncidents(req, res) {
   try {
-    const filter = {};
+    const filter = { ownerId: req.user.id };
 
     if (req.query.status) {
       const status = String(req.query.status);
@@ -37,16 +37,20 @@ async function getIncidents(req, res) {
   }
 }
 
-async function getIncidentSummary(_req, res) {
+async function getIncidentSummary(req, res) {
   try {
     const [open, resolved] = await Promise.all([
-      Incident.countDocuments({ status: "Open" }),
-      Incident.countDocuments({ status: "Resolved" }),
+      Incident.countDocuments({ ownerId: req.user.id, status: "Open" }),
+      Incident.countDocuments({ ownerId: req.user.id, status: "Resolved" }),
     ]);
 
     return res.json({
       success: true,
-      summary: { open, resolved, total: open + resolved },
+      summary: {
+        open,
+        resolved,
+        total: open + resolved,
+      },
     });
   } catch (error) {
     console.error("Incident summary error:", error.message);

@@ -7,7 +7,11 @@ async function recordIncident(device, result, checkedAt) {
     // Create an incident if none is open; otherwise update
     // the existing incident without resetting its start time.
     return Incident.findOneAndUpdate(
-      { deviceId: device.id, status: "Open" },
+      {
+        deviceId: device.id,
+        ...(device.ownerId ? { ownerId: device.ownerId } : {}),
+        status: "Open",
+      },
       {
         $set: {
           deviceName: device.name,
@@ -17,6 +21,7 @@ async function recordIncident(device, result, checkedAt) {
         },
         $setOnInsert: {
           deviceId: device.id,
+          ...(device.ownerId ? { ownerId: device.ownerId } : {}),
           status: "Open",
           startedAt: checkedAt,
         },
@@ -33,7 +38,11 @@ async function recordIncident(device, result, checkedAt) {
   if (result.status === "Online") {
     // Resolve the open incident when the device recovers.
     return Incident.findOneAndUpdate(
-      { deviceId: device.id, status: "Open" },
+      {
+        deviceId: device.id,
+        ...(device.ownerId ? { ownerId: device.ownerId } : {}),
+        status: "Open",
+      },
       {
         $set: {
           status: "Resolved",

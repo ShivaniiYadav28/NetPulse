@@ -2,6 +2,11 @@ const mongoose = require("mongoose");
 
 const monitorHistorySchema = new mongoose.Schema(
   {
+    ownerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      index: true,
+    },
     deviceId: {
       type: String,
       required: true,

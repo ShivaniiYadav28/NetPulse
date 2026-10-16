@@ -8,8 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,css}\" \"*.{json,ts,tsx,js,jsx,css,html}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,css}\" \"*.{json,ts,tsx,js,jsx,css,html}\""
+    "format": "prettier --ignore-path ../.prettierignore --write \"src/**/*.{ts,tsx,js,jsx,css,json,html}\" \"*.{json,ts,tsx,js,jsx,css,html}\" \".*.json\"",
+    "format:check": "prettier --ignore-path ../.prettierignore --check \"src/**/*.{ts,tsx,js,jsx,css,json,html}\" \"*.{json,ts,tsx,js,jsx,css,html}\" \".*.json\""
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

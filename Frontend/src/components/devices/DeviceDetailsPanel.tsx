@@ -1,4 +1,3 @@
-
 import type { Device, HistoryPoint } from "../../types/device";
 
 type DeviceDetailsPanelProps = {
@@ -16,8 +15,7 @@ function DeviceDetailsPanel({
     .filter((point) => point.deviceId === device.id)
     .sort(
       (a, b) =>
-        new Date(b.checkedAt ?? 0).getTime() -
-        new Date(a.checkedAt ?? 0).getTime()
+        new Date(b.checkedAt ?? 0).getTime() - new Date(a.checkedAt ?? 0).getTime(),
     )
     .slice(0, 10);
 
@@ -32,13 +30,9 @@ function DeviceDetailsPanel({
             Device Details
           </p>
 
-          <h2 className="text-xl font-bold text-white">
-            {device.name}
-          </h2>
+          <h2 className="text-xl font-bold text-white">{device.name}</h2>
 
-          <p className="mt-2 break-all text-sm text-slate-400">
-            {device.address}
-          </p>
+          <p className="mt-2 break-all text-sm text-slate-400">{device.address}</p>
         </div>
 
         <button
@@ -53,9 +47,7 @@ function DeviceDetailsPanel({
       {/* Current Metrics */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="rounded-xl border border-slate-700 bg-slate-800 p-4">
-          <p className="text-sm text-slate-400">
-            Current Status
-          </p>
+          <p className="text-sm text-slate-400">Current Status</p>
 
           <p
             className={`mt-2 text-xl font-bold ${
@@ -67,21 +59,15 @@ function DeviceDetailsPanel({
         </div>
 
         <div className="rounded-xl border border-slate-700 bg-slate-800 p-4">
-          <p className="text-sm text-slate-400">
-            Response Time
-          </p>
+          <p className="text-sm text-slate-400">Response Time</p>
 
           <p className="mt-2 text-xl font-bold text-white">
-            {device.latency != null
-              ? `${device.latency} ms`
-              : "Not available"}
+            {device.latency != null ? `${device.latency} ms` : "Not available"}
           </p>
         </div>
 
         <div className="rounded-xl border border-slate-700 bg-slate-800 p-4">
-          <p className="text-sm text-slate-400">
-            HTTP Status
-          </p>
+          <p className="text-sm text-slate-400">HTTP Status</p>
 
           <p className="mt-2 text-xl font-bold text-white">
             {device.httpStatus ?? "Not available"}
@@ -92,9 +78,7 @@ function DeviceDetailsPanel({
       {/* Additional Information */}
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
-          <p className="text-sm text-slate-400">
-            Last Checked
-          </p>
+          <p className="text-sm text-slate-400">Last Checked</p>
 
           <p className="mt-2 text-sm text-white">
             {device.checkedAt
@@ -104,26 +88,18 @@ function DeviceDetailsPanel({
         </div>
 
         <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
-          <p className="text-sm text-slate-400">
-            Device Type
-          </p>
+          <p className="text-sm text-slate-400">Device Type</p>
 
-          <p className="mt-2 text-sm text-white">
-            {device.type || "Not specified"}
-          </p>
+          <p className="mt-2 text-sm text-white">{device.type || "Not specified"}</p>
         </div>
       </div>
 
       {/* Latest Error */}
       {device.error && (
         <div className="mt-4 rounded-xl border border-red-900 bg-red-950/30 p-4">
-          <p className="text-sm font-semibold text-red-300">
-            Latest Error
-          </p>
+          <p className="text-sm font-semibold text-red-300">Latest Error</p>
 
-          <p className="mt-2 break-words text-sm text-red-200">
-            {device.error}
-          </p>
+          <p className="mt-2 break-words text-sm text-red-200">{device.error}</p>
         </div>
       )}
 
@@ -160,28 +136,19 @@ function DeviceDetailsPanel({
             <table className="w-full min-w-[540px] text-left text-sm">
               <thead className="bg-slate-800 text-xs uppercase tracking-wide text-slate-400">
                 <tr>
-                  <th className="px-4 py-3 font-medium">
-                    Checked At
-                  </th>
+                  <th className="px-4 py-3 font-medium">Checked At</th>
 
-                  <th className="px-4 py-3 font-medium">
-                    Status
-                  </th>
+                  <th className="px-4 py-3 font-medium">Status</th>
 
-                  <th className="px-4 py-3 font-medium">
-                    Latency
-                  </th>
+                  <th className="px-4 py-3 font-medium">Latency</th>
 
-                  <th className="px-4 py-3 font-medium">
-                    HTTP
-                  </th>
+                  <th className="px-4 py-3 font-medium">HTTP</th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-slate-800">
                 {deviceHistory.map((point, index) => {
-                  const pointIsOnline =
-                    point.status.toLowerCase() === "online";
+                  const pointIsOnline = point.status.toLowerCase() === "online";
 
                   return (
                     <tr
@@ -207,9 +174,7 @@ function DeviceDetailsPanel({
                       </td>
 
                       <td className="whitespace-nowrap px-4 py-3 text-slate-300">
-                        {point.latency != null
-                          ? `${point.latency} ms`
-                          : "—"}
+                        {point.latency != null ? `${point.latency} ms` : "—"}
                       </td>
 
                       <td className="px-4 py-3 text-slate-300">

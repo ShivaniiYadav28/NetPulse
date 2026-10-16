@@ -4,20 +4,26 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test",
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "format": "prettier --write \"**/*.js\" package.json",
-    "format:check": "prettier --check \"**/*.js\" package.json",
-    "check": "node --check server.js && node --check app.js && node --check config/db.js && node --check controllers/analyticsController.js && node --check controllers/deviceController.js && node --check controllers/incidentController.js && node --check jobs/monitorJob.js && node --check middleware/errorMiddleware.js && node --check models/Device.js && node --check models/Incident.js && node --check models/MonitorHistory.js && node --check routes/analyticsRoutes.js && node --check routes/deviceRoutes.js && node --check routes/healthRoutes.js && node --check routes/incidentRoutes.js && node --check services/deviceBootstrap.js && node --check services/deviceMonitoringService.js && node --check services/incidentService.js && node --check services/monitorService.js"
+    "format": "prettier --ignore-path ../.prettierignore --write \"**/*.{js,json}\"",
+    "format:check": "prettier --ignore-path ../.prettierignore --check \"**/*.{js,json}\"",
+    "check": "node -e \"const fs=require('fs'),path=require('path'),cp=require('child_process');function walk(d){for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);if(e.isDirectory()&&e.name!=='node_modules')walk(p);else if(e.isFile()&&p.endsWith('.js'))cp.execFileSync(process.execPath,['--check',p],{stdio:'inherit'});}}walk('.')\""
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "nodemonConfig": {
-    "watch": ["."],
+    "watch": [
+      "."
+    ],
     "ext": "js",
-    "ignore": ["node_modules/**", "logs/**", "coverage/**"]
+    "ignore": [
+      "node_modules/**",
+      "logs/**",
+      "coverage/**"
+    ]
   },
   "dependencies": {
     "cors": "^2.8.6",

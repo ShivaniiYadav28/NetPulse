@@ -8,9 +8,13 @@ import {
   getDevices,
   updateDevice as putDevice,
 } from "../services/api";
-import type { Device, DeviceDetails, HistoryPoint } from "../types/device";
+import type {
+  Device,
+  DeviceDetails,
+  HistoryPoint,
+} from "../types/device";
 
-export function useDevices() {
+export function useDevices(refreshInterval = 10) {
   const [devices, setDevices] = useState<Device[]>([]);
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,67 +24,90 @@ export function useDevices() {
   const [checkingDevice, setCheckingDevice] = useState("");
   const [deletingDevice, setDeletingDevice] = useState("");
   const [error, setError] = useState("");
-  const [requestVersion, setRequestVersion] = useState(0);
+
   const requestActive = useRef(false);
   const refreshPending = useRef(false);
 
   const fetchDashboard = useCallback(async (showRefresh = false) => {
     if (requestActive.current) {
-      if (showRefresh) refreshPending.current = true;
+      if (showRefresh) {
+        refreshPending.current = true;
+      }
       return;
     }
+
     requestActive.current = true;
-    if (showRefresh) setRefreshing(true);
+
+    if (showRefresh) {
+      setRefreshing(true);
+    }
+
     try {
       setError("");
+
       const deviceList = await getDevices();
       setDevices(deviceList);
+
       const historyResponses = await Promise.all(
-        deviceList.map((device) => getDeviceHistory(device.id).catch(() => [])),
+        deviceList.map((device) =>
+          getDeviceHistory(device.id).catch(() => [] as HistoryPoint[]),
+        ),
       );
+
       const allHistory = historyResponses
         .flat()
         .filter(
           (point) =>
-            point.checkedAt && Number.isFinite(new Date(point.checkedAt).getTime()),
+            point.checkedAt &&
+            Number.isFinite(new Date(point.checkedAt).getTime()),
         )
         .sort(
-          (a, b) => new Date(a.checkedAt!).getTime() - new Date(b.checkedAt!).getTime(),
+          (a, b) =>
+            new Date(a.checkedAt!).getTime() -
+            new Date(b.checkedAt!).getTime(),
         );
+
       setHistory(allHistory);
     } catch {
       setError(
-        "Unable to connect to the NetPulse backend. Make sure the backend is running on port 5000.",
+        "Unable to connect to the NetPulse backend. Check your connection and backend configuration.",
       );
     } finally {
       requestActive.current = false;
       setLoading(false);
       setRefreshing(false);
-      setRequestVersion((version) => version + 1);
+
+      if (refreshPending.current) {
+        refreshPending.current = false;
+        queueMicrotask(() => void fetchDashboard(true));
+      }
     }
   }, []);
 
   useEffect(() => {
-    if (!refreshPending.current) return;
+    const intervalMs = Math.max(1, refreshInterval) * 1000;
 
-    refreshPending.current = false;
-    queueMicrotask(() => void fetchDashboard(true));
-  }, [fetchDashboard, requestVersion]);
+    const initialFetch = window.setTimeout(
+      () => void fetchDashboard(),
+      0,
+    );
 
-  useEffect(() => {
-    const initialFetch = window.setTimeout(() => void fetchDashboard(), 0);
-    const timer = window.setInterval(() => void fetchDashboard(), 10000);
+    const timer = window.setInterval(
+      () => void fetchDashboard(),
+      intervalMs,
+    );
 
     return () => {
       window.clearTimeout(initialFetch);
       window.clearInterval(timer);
     };
-  }, [fetchDashboard]);
+  }, [fetchDashboard, refreshInterval]);
 
   const add = useCallback(
     async (details: DeviceDetails) => {
       setAdding(true);
       setError("");
+
       try {
         await postDevice(details);
         await fetchDashboard(true);
@@ -103,6 +130,7 @@ export function useDevices() {
     async (device: Device, details: DeviceDetails) => {
       setSavingEdit(true);
       setError("");
+
       try {
         await putDevice(device.id, details);
         await fetchDashboard(true);
@@ -125,6 +153,7 @@ export function useDevices() {
     async (device: Device) => {
       setCheckingDevice(device.id);
       setError("");
+
       try {
         await postCheck(device.id);
         await fetchDashboard(true);
@@ -138,18 +167,29 @@ export function useDevices() {
   );
 
   const remove = useCallback(
-    async (device: Device, selectedId: string, onDeleted: () => void) => {
+    async (
+      device: Device,
+      selectedId: string,
+      onDeleted: () => void,
+    ) => {
       if (
         !window.confirm(
           `Delete "${device.name}" and its monitoring history? This cannot be undone.`,
         )
-      )
+      ) {
         return;
+      }
+
       setDeletingDevice(device.id);
       setError("");
+
       try {
         await removeDevice(device.id);
-        if (selectedId === device.id) onDeleted();
+
+        if (selectedId === device.id) {
+          onDeleted();
+        }
+
         await fetchDashboard(true);
       } catch {
         setError(`Unable to delete ${device.name}.`);

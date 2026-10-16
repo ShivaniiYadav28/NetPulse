@@ -1,4 +1,4 @@
-
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Activity,
@@ -9,7 +9,9 @@ import {
   BellRing,
   Settings,
   X,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "../auth/AuthProvider";
 
 type SidebarProps = {
   open: boolean;
@@ -26,10 +28,30 @@ const navigation = [
 ];
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
+  const { user, logout } = useAuth();
+  const [logoutError, setLogoutError] = useState("");
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function handleLogout() {
+    if (loggingOut) return;
+
+    setLogoutError("");
+    setLoggingOut(true);
+
+    try {
+      await logout();
+    } catch {
+      setLogoutError("Unable to sign out. Please try again.");
+    } finally {
+      setLoggingOut(false);
+    }
+  }
+
   return (
     <>
       {open && (
         <button
+          type="button"
           aria-label="Close navigation"
           onClick={onClose}
           className="fixed inset-0 z-40 bg-black/60 lg:hidden"
@@ -49,11 +71,14 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 
             <div>
               <h1 className="text-xl font-bold text-white">NetPulse</h1>
-              <p className="text-xs text-slate-400">Network monitoring</p>
+              <p className="text-xs text-slate-400">
+                Network monitoring
+              </p>
             </div>
           </div>
 
           <button
+            type="button"
             onClick={onClose}
             aria-label="Close sidebar"
             className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 lg:hidden"
@@ -67,7 +92,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             Workspace
           </p>
 
-          <nav className="space-y-1">
+          <nav className="space-y-1" aria-label="Main navigation">
             {navigation.map(({ label, path, icon: Icon }) => (
               <NavLink
                 key={path}
@@ -90,6 +115,34 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         </div>
 
         <div className="mt-auto border-t border-slate-800 p-4">
+          {user && (
+            <div className="mb-4">
+              <p className="truncate text-sm font-medium text-slate-200">
+                {user.displayName}
+              </p>
+
+              <p className="truncate text-xs text-slate-500">
+                {user.email}
+              </p>
+
+              <button
+                type="button"
+                onClick={() => void handleLogout()}
+                disabled={loggingOut}
+                className="mt-3 inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <LogOut size={16} />
+                {loggingOut ? "Signing out…" : "Sign out"}
+              </button>
+
+              {logoutError && (
+                <p role="alert" className="mt-2 text-xs text-rose-300">
+                  {logoutError}
+                </p>
+              )}
+            </div>
+          )}
+
           <p className="text-xs text-slate-500">NetPulse</p>
           <p className="mt-1 text-sm text-slate-300">
             Network health monitoring

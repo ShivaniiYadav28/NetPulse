@@ -5,18 +5,25 @@ const deviceRoutes = require("./routes/deviceRoutes");
 const healthRoutes = require("./routes/healthRoutes");
 const incidentRoutes = require("./routes/incidentRoutes");
 const analyticsRoutes = require("./routes/analyticsRoutes");
+const alertRoutes = require("./routes/alertRoutes");
+const authRoutes = require("./routes/authRoutes");
+const { authenticate, csrfProtection } = require("./middleware/authMiddleware");
 
-const {
-  errorHandler,
-  notFoundHandler,
-} = require("./middleware/errorMiddleware");
+const { errorHandler, notFoundHandler } = require("./middleware/errorMiddleware");
 
 const app = express();
+const frontendOrigin = (process.env.FRONTEND_URL || "http://localhost:5173").replace(
+  /\/$/,
+  "",
+);
 
 // Middleware
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: frontendOrigin,
+    credentials: true,
+    allowedHeaders: ["Content-Type", "X-CSRF-Token"],
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   }),
 );
 
@@ -33,15 +40,13 @@ app.get("/", (_req, res) => {
 
 // Health endpoint
 app.use("/api/health", healthRoutes);
+app.use("/api/auth", authRoutes);
 
-// Device management and monitoring endpoints
-app.use("/api/devices", deviceRoutes);
-
-// Incident tracking endpoints
-app.use("/api/incidents", incidentRoutes);
-
-// Analytics endpoints
-app.use("/api/analytics", analyticsRoutes);
+// Application data APIs require an authenticated, CSRF-protected session.
+app.use("/api/devices", authenticate, csrfProtection, deviceRoutes);
+app.use("/api/incidents", authenticate, csrfProtection, incidentRoutes);
+app.use("/api/analytics", authenticate, csrfProtection, analyticsRoutes);
+app.use("/api/alerts", authenticate, csrfProtection, alertRoutes);
 
 // Handle unknown routes
 app.use(notFoundHandler);
