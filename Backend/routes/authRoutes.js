@@ -1,3 +1,4 @@
+
 const express = require("express");
 
 const controller = require("../controllers/authController");
@@ -33,6 +34,15 @@ router.get(
   "/me",
   authenticate,
   controller.currentUser,
+);
+
+// Update the alert notification email
+router.patch(
+  "/alert-email",
+  requireAllowedOrigin,
+  authenticate,
+  csrfProtection,
+  controller.updateAlertEmail,
 );
 
 // Log out the authenticated user

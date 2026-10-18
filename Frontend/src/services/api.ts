@@ -108,6 +108,23 @@ export const createAlertRule = (rule: {
 export const deleteAlertRule = (id: string) =>
   api.delete(`/alerts/rules/${encodeURIComponent(id)}`);
 
+export const updateAlertRule = (
+  id: string,
+  rule: {
+    name?: string;
+    deviceId?: string;
+    type?: "MonitorDown" | "HighLatency";
+    enabled?: boolean;
+    thresholdMs?: number | null;
+    failureCount?: number;
+  },
+) =>
+  api.patch(
+    `/alerts/rules/${encodeURIComponent(id)}`,
+    rule,
+  );
+
+
 // Incident API functions
 export const getIncidents = (params?: {
   status?: string;

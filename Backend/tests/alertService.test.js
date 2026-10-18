@@ -8,9 +8,11 @@ const { evaluateRule, processAlerts } = require("../services/alertService");
 const originalMethods = {
   find: AlertRule.find,
   findOneAndUpdate: AlertRule.findOneAndUpdate,
+  exists: AlertRule.exists,
   updateOne: AlertRule.updateOne,
+  alertFindOne: Alert.findOne,
   alertFindOneAndUpdate: Alert.findOneAndUpdate,
-  alertUpdateOne: Alert.updateOne,
+  alertCreate: Alert.create,
 };
 let nextRuleId = 1;
 
@@ -39,44 +41,51 @@ function createHarness(ruleValues) {
     rule.consecutiveFailures += update.$inc.consecutiveFailures;
     return { ...rule };
   };
+  AlertRule.exists = async (filter) =>
+    rules.some((rule) =>
+      Object.entries(filter).every(([key, value]) => rule[key] === value),
+    );
   AlertRule.updateOne = async (filter, update) => {
     const rule = rules.find((item) => item._id === filter._id);
     if (rule) {
       Object.assign(rule, update.$set);
     }
   };
-  Alert.findOneAndUpdate = async (filter, update, options) => {
-    let alert = alerts.find(
-      (item) => item.ruleId === filter.ruleId && item.status === "Active",
-    );
-    if (alert) {
-      Object.assign(alert, update.$set);
-      alert.occurrences += update.$inc.occurrences;
-      counters.updated += 1;
-      return { ...alert };
+  Alert.findOne = (filter) => ({
+    lean: async () =>
+      alerts.find((item) =>
+        Object.entries(filter).every(([key, value]) => item[key] === value),
+      ) || null,
+  });
+  Alert.create = async (values) => {
+    if (
+      alerts.some(
+        (item) => item.ruleId === values.ruleId && item.status === "Active",
+      )
+    ) {
+      const error = new Error("duplicate active alert");
+      error.code = 11000;
+      throw error;
     }
-    if (!options.upsert) return null;
-    alert = {
-      ...update.$setOnInsert,
-      ...update.$set,
-      ruleId: filter.ruleId,
-      occurrences: update.$inc.occurrences,
-    };
+
+    const alert = { _id: `alert-${alerts.length + 1}`, ...values };
     alerts.push(alert);
     counters.opened += 1;
     return { ...alert };
   };
-  Alert.updateOne = async (filter, update) => {
-    const alert = alerts.find(
-      (item) =>
-        item.deviceId === filter.deviceId &&
-        item.ruleId === filter.ruleId &&
-        item.status === "Active",
+  Alert.findOneAndUpdate = async (filter, update) => {
+    const alert = alerts.find((item) =>
+      Object.entries(filter).every(([key, value]) => item[key] === value),
     );
-    if (alert) {
-      Object.assign(alert, update.$set);
-      counters.resolved += 1;
+    if (!alert) return null;
+
+    Object.assign(alert, update.$set);
+    if (update.$inc?.occurrences) {
+      alert.occurrences += update.$inc.occurrences;
+      counters.updated += 1;
     }
+    if (update.$set?.status === "Resolved") counters.resolved += 1;
+    return { ...alert };
   };
 
   return { rules, alerts, counters };
@@ -85,9 +94,11 @@ function createHarness(ruleValues) {
 test.afterEach(() => {
   AlertRule.find = originalMethods.find;
   AlertRule.findOneAndUpdate = originalMethods.findOneAndUpdate;
+  AlertRule.exists = originalMethods.exists;
   AlertRule.updateOne = originalMethods.updateOne;
+  Alert.findOne = originalMethods.alertFindOne;
   Alert.findOneAndUpdate = originalMethods.alertFindOneAndUpdate;
-  Alert.updateOne = originalMethods.alertUpdateOne;
+  Alert.create = originalMethods.alertCreate;
 });
 
 const device = { id: "device-1", name: "Test monitor", address: "https://example.com" };
@@ -122,6 +133,39 @@ test("opens at threshold and updates the same active alert on repeated failures"
   assert.equal(state.counters.opened, 1);
   assert.equal(state.counters.updated, 1);
   assert.equal(state.alerts[0].occurrences, 2);
+});
+
+test("a concurrent trigger reuses one active alert", async () => {
+  const state = createHarness([
+    { _id: "rule-race", deviceId: device.id, type: "MonitorDown", name: "Down" },
+  ]);
+
+  await Promise.all([
+    processAlerts(device, { status: "Offline" }),
+    processAlerts(device, { status: "Offline" }),
+  ]);
+
+  assert.equal(state.alerts.length, 1);
+  assert.equal(state.counters.opened, 1);
+  assert.equal(state.alerts[0].occurrences, 2);
+});
+
+test("a rule disabled during a check cannot leave a late active alert", async () => {
+  const state = createHarness([
+    { _id: "rule-disabled-race", deviceId: device.id, type: "MonitorDown" },
+  ]);
+  const updateRule = AlertRule.findOneAndUpdate;
+  AlertRule.findOneAndUpdate = async (...args) => {
+    const updated = await updateRule(...args);
+    state.rules[0].enabled = false;
+    return updated;
+  };
+
+  await processAlerts(device, { status: "Offline" });
+
+  assert.equal(state.alerts.length, 1);
+  assert.equal(state.alerts[0].status, "Resolved");
+  assert.ok(state.alerts[0].resolvedAt instanceof Date);
 });
 
 test("online recovery resets failures and resolves the active alert with a timestamp", async () => {
@@ -159,6 +203,29 @@ test("high latency triggers at the threshold; normal latency recovers", async ()
 
   assert.equal(state.rules[0].consecutiveFailures, 0);
   assert.equal(state.alerts[0].status, "Resolved");
+});
+
+test("recovery for one rule does not resolve another rule's alert", async () => {
+  const state = createHarness([
+    { _id: "rule-down", deviceId: device.id, type: "MonitorDown", name: "Down" },
+    {
+      _id: "rule-latency",
+      deviceId: device.id,
+      type: "HighLatency",
+      thresholdMs: 500,
+      name: "Slow",
+    },
+  ]);
+
+  await processAlerts(device, { status: "Online", latency: 600 });
+  await processAlerts(device, { status: "Offline" });
+
+  const downAlert = state.alerts.find((alert) => alert.ruleId === "rule-down");
+  const latencyAlert = state.alerts.find(
+    (alert) => alert.ruleId === "rule-latency",
+  );
+  assert.equal(downAlert.status, "Active");
+  assert.equal(latencyAlert.status, "Resolved");
 });
 
 test("unknown results leave counters and active alerts unchanged", async () => {
