@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Clock,
   Plus,
   RefreshCw,
   Search,
