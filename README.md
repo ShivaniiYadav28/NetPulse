@@ -1,18 +1,13 @@
 # NetPulse
 
-**A full-stack website and endpoint monitoring dashboard for tracking availability, latency, incidents, and alerts.**
-
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-Backend-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/atlas)
+### Website and endpoint monitoring with a React dashboard and Node.js API
 
 ## Table of contents
 
 - [Project overview](#project-overview)
+- [Project screenshots](#project-screenshots)
 - [Live demo](#live-demo)
-- [Key features](#key-features)
-- [Screenshots](#screenshots)
+- [Features](#features)
 - [Technology stack](#technology-stack)
 - [System architecture](#system-architecture)
 - [Project structure](#project-structure)
@@ -23,16 +18,46 @@
 - [Testing](#testing)
 - [Deployment](#deployment)
 - [Security](#security)
-- [Future improvements](#future-improvements)
+- [Possible next steps](#possible-next-steps)
 - [Author](#author)
 
 ## Project overview
 
-NetPulse is a full-stack monitoring dashboard for keeping an eye on websites and other HTTP or HTTPS endpoints. It periodically checks configured endpoints, records their availability and response times, and brings current status, recent history, analytics, alerts, and incidents together in one interface.
+I built NetPulse to put the endpoint-monitoring workflow in one place: configure a website or HTTP endpoint, collect recurring checks, and review the results in a dashboard. It addresses the gap between a one-off availability check and having a useful record of status, response time, alerts, and recovery.
 
-When a site is unavailable or responds more slowly than expected, teams need more than a one-time check: they need a record of what happened, when it happened, and whether it recovered. NetPulse provides that operational view with per-account monitors, historical check data, configurable alert rules, and incident tracking. Its dashboard is designed to make service health and recent problems easy to scan.
+The backend schedules a monitoring cycle every 30 seconds while it is running. The dashboard shows each monitor's latest result alongside its history, analytics, alert rules, and incidents. The UI refreshes data every 10 seconds by default; that interval can be set to 10, 30, or 60 seconds. This project checks HTTP endpoints rather than collecting host-level CPU, memory, or operating-system metrics.
 
-Checks run every 30 seconds while the backend process is running. This is periodic monitoring, not a WebSocket or push-based real-time feed.
+## Project Screenshots
+
+### Dashboard overview
+
+![NetPulse dashboard overview](screenshots/dashboard.png.jpeg)
+
+*A summary of monitor health, uptime, average latency, and recent response-time history.*
+
+### Monitor management
+
+![NetPulse monitor management](screenshots/monitors.png.jpeg)
+
+*Manage monitored endpoints and review their latest status and response times.*
+
+### Analytics
+
+![NetPulse analytics](screenshots/analytics.png.jpeg)
+
+*Explore recorded checks, uptime, and latency trends over a selected time range.*
+
+### Alerts and rules
+
+![NetPulse alerts](screenshots/alerts.png.jpeg)
+
+*Configure alert rules and review triggered or resolved alerts.*
+
+### Incident history
+
+![NetPulse incidents](screenshots/incidents.png.jpeg)
+
+*Review monitor outages and their recovery status.*
 
 ## Live demo
 
@@ -41,32 +66,22 @@ Checks run every 30 seconds while the backend process is running. This is period
 
 The frontend sends production API requests through the `/api` proxy configured in `Frontend/vercel.json`.
 
-## Key features
+## Features
 
-- **Account authentication:** registration and login with persistent, database-backed sessions.
-- **Endpoint monitoring:** add, edit, remove, inspect, and manually check HTTP/HTTPS endpoints.
-- **Availability and latency:** checks store online/offline/unknown status, response time, HTTP status, last check time, and error details where available.
-- **Monitoring history:** review per-device check history. The regular device history endpoint retains up to 500 recent entries per monitor; analytics also supports date ranges and pagination.
-- **Dashboard statistics and analytics:** view monitor counts by status, uptime percentage, average latency, incident counts, and per-device check statistics.
-- **Alert rules:** configure `MonitorDown` and `HighLatency` rules, including failure counts, thresholds, enabled state, and monitored device.
-- **Alert management:** view active and resolved alerts, filter by status and type, and inspect individual alerts.
-- **Incident lifecycle:** offline checks open or update an incident; a later online check resolves it.
-- **Email notifications:** newly triggered alerts and resolved alerts can send email using configured SMTP. Delivery depends on valid SMTP settings and host network access; see [deployment limitations](#deployment).
-- **Responsive dashboard:** React pages provide overview, monitors, analytics, alerts, incidents, and account settings.
-- **Account-scoped data:** monitor and related records are filtered by the authenticated account.
-
-## Screenshots
-
-Screenshots are not currently included in the repository. Add actual captures before replacing these notes with Markdown image links.
-
-- `dashboard-overview.png` — overview cards and service status
-- `monitors-list.png` — configured monitors and latest check results
-- `analytics.png` — uptime and latency analytics
-- `alerts-and-incidents.png` — alert rules, alert state, and incident history
+- **Monitor websites and endpoints:** add, edit, remove, inspect, and manually check public HTTP or HTTPS URLs. Endpoint validation rejects embedded credentials and local or private network targets.
+- **Track availability and latency:** checks record Online, Offline, or Unknown status, response time when available, HTTP status, check time, and error details.
+- **Review monitoring history:** inspect recent results per monitor. The device history endpoint returns up to 500 entries; analytics history supports date ranges and pagination.
+- **Explore analytics:** see monitor counts by status, uptime, average latency, check totals, and per-device statistics for a selected period.
+- **Configure alert rules:** create `MonitorDown` or `HighLatency` rules, set a failure count or latency threshold, and enable or disable rules.
+- **Follow alert lifecycle:** review active and resolved alerts. Consecutive qualifying failures can trigger an alert; a later recovery resolves it.
+- **Track incidents:** an offline check opens or updates an incident. An online check resolves the open incident.
+- **Use account-backed sessions:** register and sign in; monitors and related records are scoped to the authenticated account.
+- **Receive email notifications:** the backend can send SMTP email when an alert is triggered or resolved. Delivery requires SMTP configuration and network access; see [deployment limitations](#deployment).
+- **Use a responsive dashboard:** pages cover overview, monitors, analytics, alerts, incidents, and account settings.
 
 ## Technology stack
 
-| Area | Technologies verified in the project |
+| Area | Technologies |
 | --- | --- |
 | Frontend | React 19, TypeScript 6, Vite 8, React Router, Axios, Tailwind CSS 4, Recharts, Lucide React |
 | Backend | Node.js, Express 5, Mongoose 9, Node.js `fetch`, built-in crypto and DNS APIs |
@@ -95,7 +110,7 @@ flowchart LR
     Backend -->|Triggered and resolved alert emails| SMTP
 ```
 
-The frontend calls `/api` in production. Vercel rewrites those requests to the Render API. Express uses Mongoose to read and write application data in MongoDB Atlas. A backend interval checks monitor endpoints and persists each result; alert and incident services process the result and may send SMTP notifications.
+In production, the browser calls `/api` on Vercel, which rewrites requests to Express on Render. The API reads and writes users, sessions, monitors, checks, alerts, and incidents in MongoDB Atlas through Mongoose. A background interval checks endpoints and persists each result; alert and incident services process those results, and the email service can send notifications through SMTP.
 
 ## Project structure
 
@@ -105,34 +120,40 @@ NetPulse/
 │   ├── config/          # MongoDB connection
 │   ├── controllers/     # HTTP request handlers
 │   ├── jobs/            # Background monitoring interval
-│   ├── middleware/      # Auth, CSRF, rate limiting, error handling
+│   ├── middleware/      # Authentication, CSRF, rate limiting, errors
 │   ├── models/          # Mongoose schemas
 │   ├── routes/          # Express route definitions
 │   ├── services/        # Auth, monitoring, alerts, analytics, email
 │   ├── tests/           # Node.js test-runner tests
 │   ├── utils/           # Cookie helpers
-│   ├── .env.example     # Backend variable names and placeholders
-│   ├── app.js            # Express middleware and route mounting
-│   └── server.js         # Database startup and monitor job lifecycle
-└── Frontend/
-    ├── public/           # Static public assets
-    ├── src/
-    │   ├── assets/       # UI assets
-    │   ├── components/   # Auth, dashboard, device, layout components
-    │   ├── hooks/        # React data hooks
-    │   ├── pages/        # Login, register, overview, monitor, and other pages
-    │   ├── services/     # Axios API clients
-    │   ├── types/        # TypeScript data types
-    │   └── utils/        # Display and device helpers
-    ├── vercel.json       # Production /api rewrite
-    └── vite.config.ts    # Vite, React, and Tailwind plugins
+│   ├── .env.example     # Safe backend environment template
+│   ├── app.js           # Express middleware and route mounting
+│   └── server.js        # Database startup and monitor job lifecycle
+├── Frontend/
+│   ├── public/          # Static public assets
+│   ├── src/
+│   │   ├── assets/      # UI assets
+│   │   ├── components/  # Auth, dashboard, device, and layout components
+│   │   ├── hooks/       # React data hooks
+│   │   ├── pages/       # Login, register, overview, and dashboard pages
+│   │   ├── services/    # Axios API clients
+│   │   ├── types/       # TypeScript data types
+│   │   └── utils/       # Display and device helpers
+│   ├── vercel.json      # Production /api rewrite
+│   └── vite.config.ts   # Vite, React, and Tailwind plugins
+└── screenshots/         # README screenshots
+    ├── dashboard.png.jpeg
+    ├── monitors.png.jpeg
+    ├── analytics.png.jpeg
+    ├── alerts.png.jpeg
+    └── incidents.png.jpeg
 ```
 
 ## Installation and local setup
 
 ### Prerequisites
 
-- Node.js compatible with the project dependencies (Node.js 20 or newer is recommended).
+- Node.js 20.19+ or 22.12+ (required by the installed Vite version and Mongoose).
 - npm.
 - A MongoDB connection string with network access from the backend.
 - Optional SMTP credentials if you want to test alert email delivery.
@@ -140,11 +161,9 @@ NetPulse/
 ### Clone the repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/ShivaniiYadav28/NetPulse.git
 cd NetPulse
 ```
-
-Replace `<repository-url>` with the repository URL you use.
 
 ### Configure and start the backend
 
@@ -195,7 +214,7 @@ SMTP_FROM=<verified-sender-address>
 | --- | --- |
 | `PORT` | Backend HTTP port; defaults to `5000` if unset. |
 | `MONGODB_URI` | MongoDB connection string. For the deployed application, use the Atlas database configured for production (`netpulse-demo`). |
-| `FRONTEND_URL` | Exact allowed frontend origin used by CORS and origin validation. Set to the local Vite origin in development and the deployed Vercel origin in production. |
+| `FRONTEND_URL` | Frontend origin used by CORS and checked against a supplied `Origin` header. Use the local Vite origin in development and the Vercel origin in production. |
 | `AUTH_SESSION_TTL_DAYS` | Session lifetime in days; must be an integer from 1 through 30. Defaults to 7. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` | Nodemailer SMTP connection settings. Port defaults to 587; secure mode is enabled only when `SMTP_SECURE=true`. |
 | `SMTP_FROM` | Sender address required to send an email. |
@@ -270,13 +289,13 @@ Analytics date ranges default to the most recent 24 hours when `from` and `to` a
 
 ## Monitoring workflow
 
-1. A user adds an HTTP or HTTPS endpoint. The backend rejects credential-bearing URLs, local/internal hostnames, and DNS results that point to private or reserved IP ranges.
-2. The background job starts a monitoring cycle every 30 seconds while the backend process is running and checks stored devices sequentially. A long cycle can therefore take longer than 30 seconds when many endpoints are configured. A user can also request an immediate manual check.
-3. Each check makes a `GET` request with a five-second timeout and does not follow redirects. HTTP status codes from 200 through 399 are recorded as **Online**; 400 through 599 are **Offline**. DNS failures, network errors, and timeouts are **Offline**; other unclassified errors may be **Unknown**.
-4. The result updates the monitor’s current status and is appended to monitoring history. History is capped at the latest 500 entries per device by the scheduled checking flow.
-5. The incident service opens or updates an incident while a monitor is offline and resolves the open incident once the monitor is online. Unknown results do not open or resolve incidents.
-6. Enabled alert rules evaluate results. `MonitorDown` rules react to offline results; `HighLatency` rules react when an online check’s latency meets or exceeds the configured threshold. Rules can require consecutive failures before an alert is created. An online/recovered result resolves an active alert for that rule.
-7. When a new alert is triggered or an alert is resolved, the backend attempts to send an email if SMTP is configured and reachable.
+1. A user adds an HTTP or HTTPS endpoint. Validation rejects embedded URL credentials, local or internal hostnames, and DNS results that resolve to private or reserved addresses.
+2. The monitoring job runs once at startup, then schedules cycles every 30 seconds. It checks devices sequentially and avoids overlapping cycles, so a cycle can take longer than 30 seconds when there are many or slow endpoints. Users can also run a manual check.
+3. Each check sends a `GET` request with a five-second timeout and does not follow redirects. HTTP responses from 200 through 399 are **Online**; responses from 400 through 599 are **Offline**. DNS failures, timeouts, and recognized network errors are **Offline**. Other unclassified errors are **Unknown**.
+4. The result updates the device's latest status and is saved in monitor history. The checking flow trims history to the latest 500 entries per device.
+5. An Offline result opens or updates an incident. An Online result resolves the open incident; an Unknown result leaves the incident state unchanged.
+6. Enabled rules evaluate each result. `MonitorDown` matches Offline checks. `HighLatency` matches Online checks at or above its configured threshold. Rules can require consecutive failures before opening an alert. When a rule condition no longer matches, its active alert is resolved.
+7. When an alert is created or resolved, the backend attempts to send email if a recipient and SMTP configuration are available and the mail server is reachable.
 
 ## Testing
 
@@ -287,7 +306,7 @@ cd Backend
 npm test
 ```
 
-The tests cover alert processing and authentication behaviors including password hashing, registration, login, invalid credentials, and session verification. The latest test run during preparation of this README passed **17 tests**.
+The suite includes alert processing and authentication tests for password hashing, registration, login, invalid credentials, and session verification.
 
 ## Deployment
 
@@ -319,13 +338,13 @@ Render documents that **Free web services cannot send outbound traffic on SMTP p
 - Passwords are hashed with Node.js `scrypt`; login compares derived hashes using a timing-safe comparison.
 - Session tokens are cryptographically random. Only SHA-256 token hashes are stored in MongoDB, and sessions have an expiry.
 - Production session cookies use the `__Host-` prefix with `Secure`, `HttpOnly`, `Path=/`, and `SameSite=Lax` attributes.
-- State-changing authenticated requests require a CSRF token checked with a timing-safe comparison. Auth routes validate the configured frontend origin; login and registration are rate limited.
+- State-changing authenticated requests require a CSRF token checked with a timing-safe comparison. Auth routes compare a supplied `Origin` header with the configured frontend origin; login and registration are rate limited.
 - Data routes scope monitors and related records to the authenticated user. Endpoint validation blocks local/private targets and URLs containing embedded credentials to reduce server-side request forgery risk.
 - Do not commit `.env` files or paste secrets into source code, issues, or logs. Use your deployment provider’s secret environment settings for production credentials.
 
-## Future improvements
+## Possible next steps
 
-The following are potential next steps, not features currently claimed as implemented:
+These are possible extensions, not features in the current implementation:
 
 - Move periodic checks to a durable worker or scheduler so monitoring continues independently of web service sleep and restarts.
 - Add an email delivery provider API option and observable delivery status/retry handling.
@@ -335,4 +354,4 @@ The following are potential next steps, not features currently claimed as implem
 
 ## Author
 
-Project author details were not provided. Add your name and preferred contact or portfolio link here if you want them displayed.
+[GitHub](https://github.com/ShivaniiYadav28)
