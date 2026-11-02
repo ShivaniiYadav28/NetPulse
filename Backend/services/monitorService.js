@@ -3,6 +3,35 @@ const net = require("node:net");
 const { performance } = require("node:perf_hooks");
 
 const TIMEOUT_MS = 5000;
+const OFFLINE_NETWORK_CODES = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ETIMEDOUT",
+  "EPIPE",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "EAI_FAIL",
+  "EAI_NODATA",
+]);
+
+class EndpointValidationError extends Error {}
+class EndpointDnsError extends Error {}
+
+function hasOfflineNetworkCode(error) {
+  let current = error;
+
+  while (current) {
+    if (OFFLINE_NETWORK_CODES.has(current.code)) {
+      return true;
+    }
+
+    current = current.cause;
+  }
+
+  return false;
+}
 
 function isPrivateIPv4(ip) {
   const parts = ip.split(".").map(Number);
@@ -68,15 +97,19 @@ async function validateEndpoint(address) {
   try {
     url = new URL(address);
   } catch {
-    throw new Error("Enter a valid endpoint URL.");
+    throw new EndpointValidationError("Enter a valid endpoint URL.");
   }
 
   if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error("Only HTTP and HTTPS endpoints are allowed.");
+    throw new EndpointValidationError(
+      "Only HTTP and HTTPS endpoints are allowed.",
+    );
   }
 
   if (url.username || url.password) {
-    throw new Error("URLs containing credentials are not allowed.");
+    throw new EndpointValidationError(
+      "URLs containing credentials are not allowed.",
+    );
   }
 
   const hostname = url.hostname.toLowerCase();
@@ -87,7 +120,9 @@ async function validateEndpoint(address) {
     hostname.endsWith(".local") ||
     hostname === "metadata.google.internal"
   ) {
-    throw new Error("Local and internal endpoints are not allowed.");
+    throw new EndpointValidationError(
+      "Local and internal endpoints are not allowed.",
+    );
   }
 
   // Resolve every answer and reject mixed public/private results. fetch resolves again,
@@ -100,47 +135,63 @@ async function validateEndpoint(address) {
     try {
       addresses = await dns.lookup(hostname, { all: true });
     } catch {
-      throw new Error("The endpoint hostname could not be resolved.");
+      throw new EndpointDnsError("The endpoint hostname could not be resolved.");
     }
   }
 
   if (addresses.length === 0 || addresses.some((entry) => isPrivateIP(entry.address))) {
-    throw new Error("Private or internal network addresses are not allowed.");
+    throw new EndpointValidationError(
+      "Private or internal network addresses are not allowed.",
+    );
   }
 
   return url;
 }
 
 async function checkEndpoint(address) {
+  let timeoutSignal;
+
   try {
     const url = await validateEndpoint(address);
     const start = performance.now();
+    timeoutSignal = AbortSignal.timeout(TIMEOUT_MS);
 
     const response = await fetch(url, {
       method: "GET",
       redirect: "manual",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: timeoutSignal,
     });
 
     const latency = Math.round(performance.now() - start);
+    const isOnline = response.status >= 200 && response.status <= 399;
+    const isOffline = response.status >= 400 && response.status <= 599;
 
     return {
-      status: "Online",
+      status: isOnline ? "Online" : isOffline ? "Offline" : "Unknown",
       latency,
       httpStatus: response.status,
       checkedAt: new Date().toISOString(),
-      error: null,
+      error: isOffline ? `HTTP request returned status ${response.status}` : null,
     };
   } catch (error) {
+    const isTimeout =
+      error.name === "TimeoutError" ||
+      (error.name === "AbortError" &&
+        timeoutSignal?.aborted &&
+        timeoutSignal.reason?.name === "TimeoutError");
+    const status =
+      isTimeout ||
+      error instanceof EndpointDnsError ||
+      hasOfflineNetworkCode(error)
+        ? "Offline"
+        : "Unknown";
+
     return {
-      status: "Offline",
+      status,
       latency: null,
       httpStatus: null,
       checkedAt: new Date().toISOString(),
-      error:
-        error.name === "TimeoutError" || error.name === "AbortError"
-          ? "Request timed out"
-          : error.message,
+      error: isTimeout ? "Request timed out" : error.message,
     };
   }
 }
